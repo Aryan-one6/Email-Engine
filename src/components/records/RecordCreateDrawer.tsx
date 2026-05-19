@@ -86,7 +86,7 @@ export function RecordCreateDrawer({
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-300 px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">New record</div>
+            <div className="text-xs uppercase tracking-[0.28em] text-accent-blue bg-white">New record</div>
             <h2 id="record-create-drawer-title" className="mt-2 truncate font-display text-2xl text-slate-900">
               Create record
             </h2>

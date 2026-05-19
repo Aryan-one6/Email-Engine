@@ -87,37 +87,16 @@ export function RecordForm({
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-6">
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <div className="rounded-[24px] border border-indigo-200 bg-[#EEF2FF] p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Lead form</div>
-              <h3 className="mt-2 font-display text-3xl text-slate-900">
-                {initialRecord ? 'Update lead' : 'Create lead'}
-              </h3>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-700">
-                Keep it simple: add only the lead details needed for email marketing.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-slate-700">
-              <span className="rounded-full border border-indigo-200 bg-white px-3 py-1">
-                {LEAD_STATUS_OPTIONS.length} statuses
-              </span>
-              <span className="rounded-full border border-indigo-200 bg-white px-3 py-1">
-                {config.sources.length} sources
-              </span>
-            </div>
-          </div>
-        </div>
-
+      
         {Object.keys(errors).length > 0 ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             Fix the highlighted fields before saving this record.
           </div>
         ) : null}
 
-        <section className="space-y-4 rounded-[24px] border border-slate-300 bg-white p-5">
+        <section className="space-y-4 p-2">
           <div>
             <h4 className="font-display text-2xl text-slate-900">Lead details</h4>
             <p className="mt-1 text-sm text-slate-600">Basic title and contact information for your lead list.</p>
@@ -161,7 +140,7 @@ export function RecordForm({
               <select
                 value={core.source_id ?? ''}
                 onChange={(event) => setCore((current) => ({ ...current, source_id: event.target.value || null }))}
-                className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
+                className="h-14 rounded-lg border border-slate-700 bg-white px-4 text-sm text-slate-900"
               >
                 <option value="">Select source</option>
                 {config.sources.map((source) => (
@@ -174,7 +153,7 @@ export function RecordForm({
           </div>
         </section>
 
-        <section className="space-y-4 rounded-[24px] border border-slate-300 bg-white p-5">
+        <section className="space-y-4  p-2">
           <div>
             <h4 className="font-display text-2xl text-slate-900">Lead status</h4>
             <p className="mt-1 text-sm text-slate-600">Track contact progress for email follow-up.</p>
@@ -185,7 +164,7 @@ export function RecordForm({
               <select
                 value={core.status ?? ''}
                 onChange={(event) => setCore((current) => ({ ...current, status: event.target.value || null }))}
-                className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
+                className="h-12 rounded-lg border border-slate-700 bg-white px-4 text-sm text-slate-900"
               >
                 {LEAD_STATUS_OPTIONS.map((statusOption) => (
                   <option key={statusOption.value} value={statusOption.value}>
@@ -203,6 +182,6 @@ export function RecordForm({
           </Button>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }

@@ -15,6 +15,27 @@ const rememberedEmailKey = 'coreflow.remembered-email';
 const existingUserSignedOutFlagKey = 'coreflow.existing-user-signed-out';
 const dashboardSetupPopupWorkspaceIdKey = 'coreflow.dashboard.setup-popup-workspace-id';
 type SignInRouteState = { prefillEmail?: string; existingUser?: boolean } | null;
+const isProductionEnvironment = import.meta.env.PROD;
+
+function getSignInErrorToastMessage(error: unknown, projectRef: string | null): string {
+  const message = error instanceof Error ? error.message : 'Unable to sign in.';
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('invalid login credentials') || normalized.includes('invalid email or password')) {
+    if (isProductionEnvironment) {
+      return 'Invalid email or password.';
+    }
+
+    const projectLabel = projectRef ? ` (${projectRef})` : '';
+    return `Invalid email or password for this Supabase project${projectLabel}. Verify you are signing in to the correct project.`;
+  }
+
+  if (isProductionEnvironment) {
+    return 'Unable to sign in right now. Please try again.';
+  }
+
+  return message;
+}
 
 export function SignInForm() {
   const navigate = useNavigate();
@@ -137,15 +158,7 @@ export function SignInForm() {
       toast.success('Welcome back to Email Engine.');
       navigate('/onboarding/complete', { replace: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in.';
-      if (message.toLowerCase().includes('invalid login credentials')) {
-        const projectLabel = projectRef ? ` (${projectRef})` : '';
-        toast.error(
-          `Invalid email or password for this Supabase project${projectLabel}. Verify you are signing in to the correct project.`,
-        );
-      } else {
-        toast.error(message);
-      }
+      toast.error(getSignInErrorToastMessage(error, projectRef));
     } finally {
       setLoading(false);
     }
