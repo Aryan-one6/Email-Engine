@@ -11,7 +11,9 @@
     "supabase:apply-auth-template": "node scripts/apply-supabase-auth-templates.mjs",
     "supabase:setup-isolated-project": "node scripts/setup-isolated-supabase-project.mjs",
     "supabase:deploy-core-functions": "bash scripts/deploy-email-core-functions.sh",
-    "supabase:delete-voice-functions": "bash scripts/delete-voice-functions.sh"
+    "supabase:delete-voice-functions": "bash scripts/delete-voice-functions.sh",
+    "supabase:set-secrets:prod": "bash scripts/set-supabase-secrets.sh prod",
+    "supabase:set-secrets:local": "bash scripts/set-supabase-secrets.sh local"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

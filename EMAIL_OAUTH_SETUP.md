@@ -33,16 +33,26 @@ Use that output for `EMAIL_CREDENTIALS_ENCRYPTION_KEY`.
 
 1. Open Google Cloud Console.
 2. Create/select a project.
-3. Configure OAuth consent screen.
-4. Create OAuth client: `Web application`.
-5. Add Authorized redirect URI:
+3. Enable API:
+   - `Gmail API`
+4. Configure OAuth consent screen.
+5. Create OAuth client: `Web application`.
+6. Add Authorized JavaScript origins:
+   - `https://email.triadflair.com`
+   - `http://localhost:5173`
+7. Add Authorized redirect URIs:
    - `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`
-6. Note `Client ID` and `Client Secret`.
-7. Ensure scopes requested by this app are allowed:
+   - Optional local callback (if you run Supabase locally): `http://127.0.0.1:54321/functions/v1/email-oauth-callback`
+8. Note `Client ID` and `Client Secret`.
+9. Ensure scopes requested by this app are allowed:
    - `openid`
    - `email`
    - `profile`
    - `https://www.googleapis.com/auth/gmail.send`
+
+Notes:
+- `gmail.send` is a sensitive scope, so for external apps keep test users configured until verification is complete.
+- If you only use Workspace users in your own org, `Internal` user type is simpler.
 
 ## 3. Microsoft 365 OAuth app
 
@@ -66,8 +76,8 @@ Replace placeholders and run:
 
 ```bash
 supabase secrets set \
-  APP_URL="http://localhost:5173" \
-  FRONTEND_URL="http://localhost:5173" \
+  APP_URL="https://email.triadflair.com" \
+  FRONTEND_URL="https://email.triadflair.com" \
   GOOGLE_OAUTH_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID" \
   GOOGLE_OAUTH_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET" \
   MICROSOFT_OAUTH_CLIENT_ID="YOUR_MS_CLIENT_ID" \
@@ -75,6 +85,8 @@ supabase secrets set \
   EMAIL_CREDENTIALS_ENCRYPTION_KEY="YOUR_32_BYTE_KEY" \
   --project-ref YOUR_PROJECT_REF
 ```
+
+For local testing only, set both values to `http://localhost:5173`.
 
 If you need custom callback URL, also set:
 

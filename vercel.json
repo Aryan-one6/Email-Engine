@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "crons": [
     {
       "path": "/api/cron/email-followup-dispatch",
@@ -8,12 +11,7 @@
     {
       "path": "/api/cron/email-manual-dispatch",
       "schedule": "* * * * *"
-    },
-    {
-  "path": "/api/cron/voice-jobs-dispatch",
-  "schedule": "* * * * *"
-}
-
+    }
   ],
   "rewrites": [
     {

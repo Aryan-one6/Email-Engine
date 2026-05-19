@@ -82,6 +82,44 @@ npm run dev
 npm run build
 ```
 
+## Vercel production deployment (`https://email.triadflair.com`)
+
+1. Ensure Vercel project points to this repo root (`Email-Engine`) with:
+   - Build command: `npm run build`
+   - Output directory: `dist`
+   - Install command: `npm install`
+
+2. Set frontend env vars in Vercel (Production):
+
+```bash
+VITE_SUPABASE_URL=https://<EMAIL_ENGINE_PROJECT_REF>.supabase.co
+VITE_SUPABASE_ANON_KEY=<SUPABASE_PUBLISHABLE_ANON_KEY>
+```
+
+3. Set cron/API env vars in Vercel (Production):
+
+```bash
+SUPABASE_URL=https://<EMAIL_ENGINE_PROJECT_REF>.supabase.co
+EMAIL_FOLLOWUP_CRON_SECRET=<LONG_RANDOM_SECRET>
+EMAIL_MANUAL_CRON_SECRET=<LONG_RANDOM_SECRET>
+```
+
+4. In Supabase Auth settings for Email-Engine project:
+   - Site URL: `https://email.triadflair.com`
+   - Redirect URLs: add `https://email.triadflair.com/*`
+
+5. Deploy production:
+
+```bash
+vercel --prod
+```
+
+6. Verify these routes return `200`/`401` (not `404`):
+   - `/api/cron/email-followup-dispatch`
+   - `/api/cron/email-manual-dispatch`
+
+For local Vercel dev, mirror the same values in `.env.local` (or `vercel env pull` output).
+
 ## Supabase setup
 
 ### Required: isolate Email-Engine from CoreFlow DB
@@ -206,6 +244,38 @@ supabase functions deploy email-followup-dispatch
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+### Set Supabase function secrets (prod + localhost)
+
+This repo includes helper commands to push all required function secrets from `supabase/.env`:
+
+```bash
+# Production redirect domain
+npm run supabase:set-secrets:prod
+
+# Local redirect domain (localhost callback to frontend)
+npm run supabase:set-secrets:local
+```
+
+These commands set app/OAuth secrets (`APP_URL`, `FRONTEND_URL`, OAuth client IDs/secrets, encryption key).  
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected by Supabase automatically for Edge Functions.
+
+Both commands call:
+
+```bash
+bash scripts/set-supabase-secrets.sh [prod|local] [project-ref] [env-file]
+```
+
+Before running, fill these in `supabase/.env`:
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `EMAIL_CREDENTIALS_ENCRYPTION_KEY`
+
+Generate encryption key:
+
+```bash
+openssl rand -base64 32
+```
 
 ### Email OAuth providers (Google Workspace + Microsoft 365)
 
