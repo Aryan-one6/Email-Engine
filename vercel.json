@@ -6,11 +6,11 @@
   "crons": [
     {
       "path": "/api/cron/email-followup-dispatch",
-      "schedule": "* * * * *"
+      "schedule": "5 0 * * *"
     },
     {
       "path": "/api/cron/email-manual-dispatch",
-      "schedule": "* * * * *"
+      "schedule": "10 0 * * *"
     }
   ],
   "rewrites": [
