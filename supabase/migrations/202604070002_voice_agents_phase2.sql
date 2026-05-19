@@ -1,0 +1,2 @@
+-- Archived voice/Telnyx migration placeholder for Email-Engine.
+-- Intentionally left as no-op to keep migration history compatibility.

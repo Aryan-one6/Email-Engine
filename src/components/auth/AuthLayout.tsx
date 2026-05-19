@@ -1,0 +1,250 @@
+// AuthLayout.tsx
+import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
+import type { Variants } from 'framer-motion';
+import type { ReactNode } from 'react';
+import { Headphones } from 'lucide-react';
+import { AnimatedBackground } from '../ui/AnimatedBackground';
+import { LogoMark } from '../ui/LogoMark';
+import { cn } from '../../lib/utils';
+
+interface AuthLayoutProps {
+  eyebrow: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+  footer: ReactNode;
+  leftPanel?: ReactNode;
+  rightPanelClassName?: string;
+  layoutVariant?: 'default' | 'signin';
+}
+
+const smoothEase = [0.21, 0.47, 0.32, 0.98] as const;
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: smoothEase },
+  },
+};
+
+export function AuthLayout({
+  eyebrow,
+  title,
+  description,
+  children,
+  footer,
+  leftPanel,
+  rightPanelClassName,
+  layoutVariant = 'default',
+}: AuthLayoutProps) {
+  const { scrollY } = useScroll();
+  const leftPanelFollowY = useSpring(useTransform(scrollY, [0, 900], [0, 96]), {
+    stiffness: 90,
+    damping: 22,
+    mass: 0.4,
+  });
+
+  if (layoutVariant === 'signin') {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-[#f7f8fb]">
+        <div className="grid h-full w-full overflow-hidden bg-[#f7f8fb] lg:grid-cols-[1.06fr_1fr]">
+          <section className="flex items-stretch px-6 py-24 sm:px-12 lg:px-16">
+            <div className="flex min-h-full w-full max-w-[560px] flex-col">
+              <div className="space-y-3">
+                <div className="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">
+                  {eyebrow}
+                </div>
+                <h1 className="font-display text-[2.7rem] font-semibold leading-[1.14] tracking-tight text-slate-950">
+                  {title}
+                </h1>
+                <p className="max-w-[480px] text-lg leading-8 text-slate-600">{description}</p>
+              </div>
+              <div className="mt-7 flex-1">{children}</div>
+              <div className="mt-auto border-t border-slate-200 pt-4 text-center text-sm leading-7 text-slate-700">
+                {footer}
+              </div>
+            </div>
+          </section>
+
+          <aside
+            className="relative hidden overflow-hidden px-6 py-14 bg-cover bg-right bg-no-repeat sm:px-12 lg:block lg:px-16"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(18,22,45,0.46), rgba(45,38,95,0.56)), url('/images/crm-office-signin.png')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center right',
+              backgroundRepeat: 'no-repeat',
+            }}
+          >
+            <div className="absolute right-6 top-14 z-20 sm:right-12 lg:right-16">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
+                <Headphones className="h-4 w-4" />
+                Support
+              </div>
+            </div>
+            <div className="relative z-10 flex h-full flex-col">
+              <div className="flex h-full flex-col">{leftPanel}</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden">
+      <AnimatedBackground />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1480px] items-center px-6 py-8 sm:px-8 lg:px-10">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={containerVariants}
+          className="grid w-full items-start gap-8 xl:grid-cols-[1fr_1fr] 2xl:gap-10"
+        >
+          <motion.aside
+            variants={itemVariants}
+            className="hidden self-start rounded-[40px] border border-white/30 bg-white/15 backdrop-blur-xl shadow-2xl xl:sticky xl:top-6 xl:flex xl:max-h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden"
+            style={{
+              y: leftPanelFollowY,
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.08) 100%)',
+            }}
+          >
+            <div className="absolute inset-0 rounded-[40px] bg-gradient-to-br from-accent-blue/10 to-transparent" />
+            {leftPanel ? (
+              <div className="relative p-7 sm:p-8 lg:p-9 2xl:p-10">
+                {leftPanel}
+              </div>
+            ) : (
+              <div className="relative p-10 lg:p-12">
+                <motion.div variants={itemVariants} className="space-y-12">
+                  <LogoMark />
+                  <div className="space-y-5">
+                    <motion.div
+                      variants={itemVariants}
+                      className="inline-flex rounded-full border border-accent-blue/40 bg-accent-blue/25 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.28em] text-accent-blue backdrop-blur-sm"
+                    >
+                      Shared onboarding flow
+                    </motion.div>
+                    <motion.h2
+                      variants={itemVariants}
+                      className="font-display text-4xl font-semibold leading-tight text-white"
+                    >
+                      Premium entry into an email-first platform.
+                    </motion.h2>
+                    <motion.p
+                      variants={itemVariants}
+                      className="max-w-xl text-base leading-8 text-white/90"
+                    >
+                      Sign in or create your account, launch your workspace, and route directly into templates,
+                      imports, and automation.
+                    </motion.p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  variants={containerVariants}
+                  className="mt-12 grid gap-5 sm:grid-cols-2"
+                >
+                  {[
+                    { title: 'Template Builder', description: 'Design reusable emails with dynamic variables.' },
+                    { title: 'Import Leads', description: 'Upload CSV leads with required name and email validation.' },
+                    { title: 'Auto Sequences', description: 'Run follow-up automation and monitor delivery health.' },
+                    { title: 'Sender Setup', description: 'Connect SMTP or OAuth senders for reliable outbound mail.' },
+                  ].map((option) => {
+
+                    return (
+                      <motion.div
+                        key={option.title}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02, y: -4 }}
+                        transition={{ duration: 0.2 }}
+                        className="group relative overflow-hidden rounded-[28px] border border-white/25 bg-white/15 p-5 backdrop-blur-sm transition-all duration-300 hover:bg-white/25"
+                      >
+                        <div className="relative z-10">
+                          <h3 className="font-display text-lg font-semibold text-white">{option.title}</h3>
+                          <p className="mt-1.5 text-sm leading-6 text-white/80">{option.description}</p>
+                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-accent-blue/0 to-accent-blue/15 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </div>
+            )}
+          </motion.aside>
+
+          <motion.div
+            variants={itemVariants}
+            className={cn(
+              'surface-panel relative overflow-hidden rounded-[32px] border border-white/25 bg-white shadow-2xl',
+              rightPanelClassName,
+            )}
+          >
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-accent-blue/[0.08] via-transparent to-purple-500/[0.08]"
+              animate={{
+                opacity: [0.4, 0.7, 0.4],
+              }}
+              transition={{
+                duration: 8,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+            <div className="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-gradient-to-br from-accent-blue/15 to-purple-500/15 blur-3xl" />
+            <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-cyan-500/15 to-accent-blue/15 blur-3xl" />
+            <div className="relative p-5 sm:p-7 md:p-8 lg:p-8">
+              <motion.div variants={containerVariants} className="relative space-y-4">
+                <motion.div variants={itemVariants} className="xl:hidden">
+                  <LogoMark />
+                </motion.div>
+                <div className="space-y-3">
+                  <motion.div
+                    variants={itemVariants}
+                    className="inline-flex rounded-full border border-slate-200 bg-white/90 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-700 backdrop-blur-sm shadow-sm"
+                  >
+                    {eyebrow}
+                  </motion.div>
+                  <div>
+                    <motion.h1
+                      variants={itemVariants}
+                      className="font-display bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl lg:text-5xl xl:text-[3.1rem]"
+                    >
+                      {title}
+                    </motion.h1>
+                    <motion.p
+                      variants={itemVariants}
+                      className="mt-2 max-w-2xl text-base leading-7 text-slate-700"
+                    >
+                      {description}
+                    </motion.p>
+                  </div>
+                </div>
+                {children}
+                <motion.div
+                  variants={itemVariants}
+                  className="border-t border-slate-200 pt-3 text-xs leading-5 text-slate-600"
+                >
+                  {footer}
+                </motion.div>
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}

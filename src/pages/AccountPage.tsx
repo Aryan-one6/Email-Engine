@@ -1,0 +1,1390 @@
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  Clock3,
+  Fingerprint,
+  Globe2,
+  Home,
+  IdCard,
+  Lock,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { PageHeader } from '../components/dashboard/PageHeader';
+import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { FullPageLoader } from '../components/ui/FullPageLoader';
+import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
+import {
+  getAccountSettings,
+  updateAccountSettings,
+  type AccountSettingsResponse,
+} from '../lib/account-service';
+import type { WorkspaceSummary } from '../lib/types';
+import { cn, getInitials, isValidWorkspaceSlug, slugify } from '../lib/utils';
+
+type DateFormatOption = 'dd/mm/yyyy' | 'mm/dd/yyyy' | 'yyyy-mm-dd';
+type LandingPageOption = '/email' | '/account';
+type AccountSectionKey = 'profile' | 'workspace' | 'security' | 'preferences';
+
+interface AccountPreferences {
+  timezone: string;
+  dateFormat: DateFormatOption;
+  landingPage: LandingPageOption;
+}
+
+interface SettingsSection {
+  key: AccountSectionKey;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+const TIMEZONE_OPTIONS = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Kolkata',
+  'Asia/Dubai',
+  'Australia/Sydney',
+];
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  {
+    key: 'profile',
+    label: 'Profile',
+    description: 'Personal details and ownership labels.',
+    icon: IdCard,
+  },
+  {
+    key: 'workspace',
+    label: 'Workspace',
+    description: 'Shared workspace identity and mode.',
+    icon: Building2,
+  },
+  {
+    key: 'security',
+    label: 'Security',
+    description: 'Sign-in, verification, and session.',
+    icon: Fingerprint,
+  },
+  {
+    key: 'preferences',
+    label: 'Preferences',
+    description: 'Browser defaults and workspace view.',
+    icon: SlidersHorizontal,
+  },
+];
+
+const SECTION_ACCENTS: Record<
+  AccountSectionKey,
+  {
+    glow: string;
+    icon: string;
+    text: string;
+    ring: string;
+    bar: string;
+    card: string;
+    iconHalo: string;
+  }
+> = {
+  profile: {
+    glow: 'from-indigo-500/18 via-sky-400/12 to-transparent',
+    icon:
+      'border-indigo-200 bg-gradient-to-br from-indigo-500 via-violet-500 to-sky-500 text-white shadow-lg shadow-indigo-500/35',
+    text: 'text-indigo-700',
+    ring: 'ring-indigo-200/70',
+    bar: 'from-indigo-500 via-violet-500 to-sky-400',
+    card: 'from-indigo-500/12 via-violet-500/8 to-sky-400/10',
+    iconHalo: 'bg-indigo-400/40',
+  },
+  workspace: {
+    glow: 'from-cyan-500/18 via-blue-400/12 to-transparent',
+    icon:
+      'border-cyan-200 bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500 text-white shadow-lg shadow-cyan-500/35',
+    text: 'text-cyan-700',
+    ring: 'ring-cyan-200/70',
+    bar: 'from-cyan-500 via-blue-500 to-indigo-500',
+    card: 'from-cyan-500/12 via-blue-500/8 to-indigo-400/10',
+    iconHalo: 'bg-cyan-400/40',
+  },
+  security: {
+    glow: 'from-emerald-500/18 via-teal-400/12 to-transparent',
+    icon:
+      'border-emerald-200 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 text-white shadow-lg shadow-emerald-500/35',
+    text: 'text-emerald-700',
+    ring: 'ring-emerald-200/70',
+    bar: 'from-emerald-500 via-teal-500 to-cyan-500',
+    card: 'from-emerald-500/12 via-teal-500/8 to-cyan-400/10',
+    iconHalo: 'bg-emerald-400/40',
+  },
+  preferences: {
+    glow: 'from-fuchsia-500/18 via-violet-400/12 to-transparent',
+    icon:
+      'border-fuchsia-200 bg-gradient-to-br from-fuchsia-500 via-violet-500 to-indigo-500 text-white shadow-lg shadow-fuchsia-500/35',
+    text: 'text-fuchsia-700',
+    ring: 'ring-fuchsia-200/70',
+    bar: 'from-fuchsia-500 via-violet-500 to-indigo-500',
+    card: 'from-fuchsia-500/12 via-violet-500/8 to-indigo-400/10',
+    iconHalo: 'bg-fuchsia-400/40',
+  },
+};
+
+const TIMEZONE_DEFAULT = 'UTC';
+const PANEL_TRANSITION = { duration: 0.22, ease: 'easeOut' as const };
+
+const INPUT_CLASSES =
+  'h-11 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-200/70 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500';
+
+const READ_ONLY_INPUT_CLASSES =
+  'h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-600';
+
+function getDefaultTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || TIMEZONE_DEFAULT;
+  } catch {
+    return TIMEZONE_DEFAULT;
+  }
+}
+
+function getDefaultPreferences(): AccountPreferences {
+  return {
+    timezone: getDefaultTimezone(),
+    dateFormat: 'dd/mm/yyyy',
+    landingPage: '/email',
+  };
+}
+
+function getPreferencesStorageKey(userId: string, workspaceId: string) {
+  return `coreflow.account.preferences.${userId}.${workspaceId}`;
+}
+
+function formatRole(role: string | null | undefined) {
+  if (!role) return 'Agent';
+
+  return role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatProvider(provider: string) {
+  if (!provider) return 'Email';
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return 'Not available';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Not available';
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(parsed);
+}
+
+function resolveWorkspaceFormValues(
+  nextSettings: AccountSettingsResponse,
+  activeWorkspace: WorkspaceSummary | null,
+) {
+  const settingsWorkspace = nextSettings.workspace;
+
+  return {
+    name: settingsWorkspace.name.trim() || activeWorkspace?.name || '',
+    slug: settingsWorkspace.slug.trim() || activeWorkspace?.slug || '',
+  };
+}
+
+function getRoleTone(role: string | null | undefined) {
+  switch (role) {
+    case 'owner':
+      return 'indigo' as const;
+    case 'agent':
+      return 'green' as const;
+    default:
+      return 'slate' as const;
+  }
+}
+
+function getRoleDescription(role: string | null | undefined) {
+  switch (role) {
+    case 'owner':
+      return 'Owners can manage workspace identity, shared settings, and access-sensitive controls.';
+    case 'agent':
+      return 'Agents can work inside the workspace, but shared workspace settings remain read-only.';
+    default:
+      return 'Agents can update their own profile and preferences, but shared workspace settings remain read-only.';
+  }
+}
+
+function arePreferencesEqual(left: AccountPreferences, right: AccountPreferences) {
+  return (
+    left.timezone === right.timezone &&
+    left.dateFormat === right.dateFormat &&
+    left.landingPage === right.landingPage
+  );
+}
+
+function hasConfiguredWorkspaceEmailSender(
+  senders: Array<{
+    status: 'pending' | 'connected' | 'failed' | 'disabled';
+    is_active: boolean;
+  }>,
+) {
+  return senders.some((sender) => sender.is_active && sender.status === 'connected');
+}
+
+function getProfileDisplayName(fullName: string, email: string | null | undefined) {
+  const trimmedName = fullName.trim();
+  if (trimmedName) return trimmedName;
+  if (!email) return 'Workspace user';
+  return email.split('@')[0] || 'Workspace user';
+}
+
+function getProfileInitials(fullName: string, email: string | null | undefined) {
+  return getInitials(getProfileDisplayName(fullName, email));
+}
+
+function StatusBadge({
+  label,
+  tone = 'slate',
+}: {
+  label: string;
+  tone?: 'slate' | 'indigo' | 'green' | 'amber' | 'rose';
+}) {
+  const styles = {
+    slate: 'border-slate-200 bg-slate-100 text-slate-700',
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    rose: 'border-rose-200 bg-rose-50 text-rose-700',
+  };
+
+  return (
+    <span className={cn('inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium', styles[tone])}>
+      {label}
+    </span>
+  );
+}
+
+function SettingsNav({
+  activeSection,
+  onSelect,
+}: {
+  activeSection: AccountSectionKey;
+  onSelect: (section: AccountSectionKey) => void;
+}) {
+  return (
+    <aside className="relative w-full overflow-hidden border-b border-slate-200 bg-white/70 p-4 lg:w-[280px] lg:shrink-0 lg:border-b-0 lg:border-r lg:p-5">
+      <motion.div
+        className="pointer-events-none absolute -left-20 top-16 h-48 w-48 rounded-full bg-indigo-300/20 blur-3xl"
+        animate={{ scale: [1, 1.18, 1], opacity: [0.35, 0.7, 0.35] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <div className="relative mb-4 hidden lg:block">
+        <div className="text-xs uppercase tracking-[0.22em] text-accent-blue">Settings</div>
+        <h2 className="mt-2 text-xl font-semibold text-slate-950">Account settings</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">Choose one area to manage.</p>
+      </div>
+
+      <div
+        className="grid grid-cols-2 gap-2 lg:flex lg:flex-col"
+        data-guide-id="account-settings-nav"
+      >
+        {SETTINGS_SECTIONS.map((section) => {
+          const Icon = section.icon;
+          const active = activeSection === section.key;
+          const accent = SECTION_ACCENTS[section.key];
+
+          return (
+            <motion.button
+              key={section.key}
+              type="button"
+              layout
+              onClick={() => onSelect(section.key)}
+              whileHover={{ y: -5, scale: 1.025 }}
+              whileTap={{ scale: 0.98 }}
+              animate={
+                active
+                  ? {
+                    y: [0, -2, 0],
+                    scale: [1, 1.012, 1],
+                  }
+                  : {
+                    y: 0,
+                    scale: 1,
+                  }
+              }
+              transition={
+                active
+                  ? { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }
+                  : PANEL_TRANSITION
+              }
+              className={cn(
+                'group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition will-change-transform',
+                active
+                  ? cn(
+                    'border-white bg-white text-slate-950 shadow-[0_18px_42px_rgba(79,70,229,0.16)] ring-2',
+                    accent.ring,
+                  )
+                  : 'border-slate-200 bg-white/70 text-slate-600 hover:border-slate-300 hover:bg-white hover:shadow-[0_14px_32px_rgba(15,23,42,0.08)]',
+              )}
+            >
+              {/* moving colorful card wash */}
+              <motion.div
+                className={cn(
+                  'pointer-events-none absolute inset-0 bg-gradient-to-r opacity-0 transition group-hover:opacity-100',
+                  accent.card,
+                  active && 'opacity-100',
+                )}
+                style={{ backgroundSize: '220% 220%' }}
+                animate={active ? { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] } : undefined}
+                transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
+              />
+
+              {/* soft glow */}
+              <div
+                className={cn(
+                  'pointer-events-none absolute inset-0 bg-gradient-to-br opacity-0 transition group-hover:opacity-100',
+                  accent.glow,
+                  active && 'opacity-100',
+                )}
+              />
+
+              {/* subtle animated shine line */}
+              <motion.div
+                className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-0 group-hover:opacity-100"
+                animate={active ? { x: ['0%', '420%'] } : undefined}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              />
+
+              {active ? (
+                <motion.span
+                  layoutId="account-active-section"
+                  className={cn('absolute inset-y-3 left-0 w-1 rounded-r-full bg-gradient-to-b', accent.bar)}
+                  animate={{ scaleY: [0.72, 1, 0.72], opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ transformOrigin: 'center' }}
+                />
+              ) : null}
+
+              {/* colorful animated section icon */}
+              <motion.div
+                animate={
+                  active
+                    ? {
+                      y: [0, -3, 0],
+                      rotate: [0, -8, 8, 0],
+                      scale: [1, 1.12, 1],
+                    }
+                    : {
+                      y: 0,
+                      rotate: 0,
+                      scale: 1,
+                    }
+                }
+                whileHover={{ rotate: active ? 0 : -5, scale: 1.09 }}
+                transition={
+                  active
+                    ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+                    : PANEL_TRANSITION
+                }
+                className={cn(
+                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 will-change-transform',
+                  active
+                    ? accent.icon
+                    : cn('border-white/80 bg-white/85 shadow-sm group-hover:shadow-md', accent.text),
+                )}
+              >
+                {active ? (
+                  <motion.span
+                    className={cn('pointer-events-none absolute -inset-2 rounded-[22px] blur-md', accent.iconHalo)}
+                    animate={{ opacity: [0.15, 0.55, 0.15], scale: [0.85, 1.2, 0.85] }}
+                    transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                ) : null}
+
+                <motion.span
+                  className="relative"
+                  animate={active ? { rotate: [0, 6, -6, 0] } : undefined}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Icon className="h-4 w-4" />
+                </motion.span>
+              </motion.div>
+
+              <motion.div
+                className="relative min-w-0"
+                animate={active ? { x: [0, 2, 0] } : { x: 0 }}
+                transition={{ duration: 2.8, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+              >
+                <div className={cn('text-sm font-semibold', active ? 'text-slate-950' : 'text-slate-800')}>
+                  {section.label}
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">{section.description}</p>
+              </motion.div>
+            </motion.button>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  action,
+  children,
+  guideId,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  guideId?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -5, scale: 1.01 }}
+      whileTap={{ scale: 0.995 }}
+      transition={PANEL_TRANSITION}
+      className="group will-change-transform"
+      data-guide-id={guideId}
+    >
+      <Card className="relative overflow-hidden rounded-3xl border-slate-200 bg-white p-5 shadow-[0_14px_40px_rgba(15,23,42,0.05)] transition group-hover:border-indigo-100 group-hover:shadow-[0_22px_55px_rgba(79,70,229,0.10)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(99,102,241,0.10),transparent_28%),radial-gradient(circle_at_92%_18%,rgba(34,211,238,0.10),transparent_24%)] opacity-80" />
+        <motion.div
+          className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-0 group-hover:opacity-100"
+          animate={{ x: ['0%', '420%'] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.span
+          className="pointer-events-none absolute right-5 top-5 h-2 w-2 rounded-full bg-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.55)]"
+          animate={{ scale: [0.8, 1.5, 0.8], opacity: [0.3, 0.9, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-950">{title}</h3>
+            {description ? <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+
+        <div className="relative mt-5">{children}</div>
+      </Card>
+    </motion.div>
+  );
+}
+
+function PreferenceRow({
+  label,
+  helper,
+  control,
+}: {
+  label: string;
+  helper: string;
+  control: ReactNode;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -5, scale: 1.01 }}
+      whileTap={{ scale: 0.995 }}
+      transition={PANEL_TRANSITION}
+      className="group relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-fuchsia-100 hover:shadow-[0_18px_42px_rgba(192,38,211,0.10)] md:flex-row md:items-center md:justify-between"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/8 via-transparent to-indigo-500/8" />
+      <motion.div
+        className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 group-hover:opacity-100"
+        animate={{ x: ['0%', '420%'] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <div className="relative">
+        <div className="font-medium text-slate-950">{label}</div>
+        <p className="mt-1 text-sm leading-6 text-slate-500">{helper}</p>
+      </div>
+      <div className="relative w-full shrink-0 md:w-[260px]">{control}</div>
+    </motion.div>
+  );
+}
+
+function UnsavedChangesBar({
+  visible,
+  message,
+  onSave,
+  onReset,
+  loading,
+}: {
+  visible: boolean;
+  message: string;
+  onSave: () => void;
+  onReset: () => void;
+  loading: boolean;
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {visible ? (
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 14 }}
+          transition={PANEL_TRANSITION}
+          className="sticky bottom-4 z-10 mt-5 rounded-3xl border border-indigo-200 bg-white/95 px-4 py-3 shadow-[0_18px_45px_rgba(79,70,229,0.14)] backdrop-blur"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-medium text-slate-950">Unsaved changes</div>
+              <p className="text-sm text-slate-600">{message}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={onReset} disabled={loading}>
+                Reset
+              </Button>
+              <Button type="button" onClick={onSave} loading={loading}>
+                Save changes
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+export function AccountPage() {
+  const navigate = useNavigate();
+  const { session, user, workspace, refreshWorkspace, signOut } = useAuth();
+
+  const [settings, setSettings] = useState<AccountSettingsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [activeSection, setActiveSection] = useState<AccountSectionKey>('profile');
+
+  const [profileName, setProfileName] = useState('');
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceSlug, setWorkspaceSlug] = useState('');
+  const [preferences, setPreferences] = useState<AccountPreferences>(getDefaultPreferences);
+  const [savedPreferences, setSavedPreferences] = useState<AccountPreferences>(getDefaultPreferences);
+
+  const authProviders = useMemo(() => {
+    const rawProviders = user?.app_metadata?.providers;
+    if (Array.isArray(rawProviders) && rawProviders.length > 0) {
+      return rawProviders.map((provider) => formatProvider(String(provider)));
+    }
+
+    const singleProvider = user?.app_metadata?.provider;
+    if (typeof singleProvider === 'string' && singleProvider.length > 0) {
+      return [formatProvider(singleProvider)];
+    }
+
+    return ['Email'];
+  }, [user?.app_metadata?.provider, user?.app_metadata?.providers]);
+
+  usePageGuide({
+    key: 'account-settings',
+    title: 'Manage account and workspace settings',
+    summary:
+      'This page combines personal profile details, shared workspace identity, security visibility, and local preferences.',
+    nextStep:
+      settings?.workspace.can_manage
+        ? 'Review profile changes first, then update shared workspace settings only when the whole team needs the new values.'
+        : 'Use this page for your profile and personal preferences. Shared workspace settings stay read-only until permissions change.',
+    highlights: ['Profile details', 'Workspace identity', 'Security and preferences'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'account-refresh',
+        title: 'Refresh account data',
+        body: 'Use refresh before editing if the workspace or profile might have changed in another session.',
+        targetId: 'account-refresh',
+      },
+      {
+        id: 'account-sidebar',
+        title: 'Switch settings areas',
+        body: 'Use the settings sidebar to move between profile, workspace, security, and preferences.',
+        targetId: 'account-settings-nav',
+      },
+    ],
+  });
+
+  function applySettings(nextSettings: AccountSettingsResponse, activeWorkspaceOverride = workspace) {
+    const resolvedWorkspace = resolveWorkspaceFormValues(nextSettings, activeWorkspaceOverride);
+
+    setSettings(nextSettings);
+    setProfileName(nextSettings.profile.full_name ?? '');
+    setWorkspaceName(resolvedWorkspace.name);
+    setWorkspaceSlug(resolvedWorkspace.slug);
+  }
+
+  async function loadSettings() {
+    if (!session || !workspace) return;
+
+    setLoading(true);
+
+    try {
+      const response = await getAccountSettings(session, workspace.id);
+      applySettings(response);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to load account settings.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!session || !workspace) return;
+    void loadSettings();
+  }, [session, workspace]);
+
+  useEffect(() => {
+    if (!session || !workspace || typeof window === 'undefined') return;
+
+    const defaults = getDefaultPreferences();
+    const storageKey = getPreferencesStorageKey(session.user.id, workspace.id);
+    const storedValue = window.localStorage.getItem(storageKey);
+
+    if (!storedValue) {
+      setPreferences(defaults);
+      setSavedPreferences(defaults);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedValue) as Partial<AccountPreferences>;
+      const nextPreferences = {
+        timezone:
+          typeof parsed.timezone === 'string' && TIMEZONE_OPTIONS.includes(parsed.timezone)
+            ? parsed.timezone
+            : defaults.timezone,
+        dateFormat:
+          parsed.dateFormat === 'dd/mm/yyyy' ||
+            parsed.dateFormat === 'mm/dd/yyyy' ||
+            parsed.dateFormat === 'yyyy-mm-dd'
+            ? parsed.dateFormat
+            : defaults.dateFormat,
+        landingPage:
+          parsed.landingPage === '/email' ||
+            parsed.landingPage === '/account'
+            ? parsed.landingPage
+            : defaults.landingPage,
+      };
+
+      setPreferences(nextPreferences);
+      setSavedPreferences(nextPreferences);
+    } catch {
+      setPreferences(defaults);
+      setSavedPreferences(defaults);
+    }
+  }, [session, workspace]);
+
+  async function handleSignOut() {
+    await signOut();
+    toast.success('Signed out successfully.');
+    navigate('/signin', { replace: true, state: { existingUser: true } });
+  }
+
+  async function handleSaveProfile() {
+    if (!session || !workspace) return;
+
+    const trimmed = profileName.trim();
+    if (trimmed.length < 2) {
+      toast.error('Full name must be at least 2 characters.');
+      return;
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const response = await updateAccountSettings(session, {
+        workspace_id: workspace.id,
+        profile: { full_name: trimmed },
+      });
+
+      applySettings(response);
+      toast.success('Profile updated.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update profile.');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function handleSaveWorkspace() {
+    if (!session || !workspace) return;
+
+    if (!settings?.workspace.can_manage) {
+      toast.error('Only the workspace owner can update workspace settings.');
+      return;
+    }
+
+    const trimmedName = workspaceName.trim();
+    const trimmedSlug = workspaceSlug.trim();
+
+    if (trimmedName.length < 2) {
+      toast.error('Workspace name must be at least 2 characters.');
+      return;
+    }
+
+    if (!isValidWorkspaceSlug(trimmedSlug)) {
+      toast.error('Workspace slug must use 3+ lowercase letters, numbers, and hyphens only.');
+      return;
+    }
+
+    setSavingWorkspace(true);
+
+    try {
+      const response = await updateAccountSettings(session, {
+        workspace_id: workspace.id,
+        workspace: {
+          name: trimmedName,
+          slug: trimmedSlug,
+        },
+      });
+
+      const refreshedWorkspace = await refreshWorkspace(session);
+      applySettings(response, refreshedWorkspace);
+      toast.success('Workspace setup updated.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update workspace setup.');
+    } finally {
+      setSavingWorkspace(false);
+    }
+  }
+
+  async function handleSavePreferences() {
+    if (!session || !workspace || typeof window === 'undefined') return;
+
+    setSavingPreferences(true);
+
+    try {
+      const storageKey = getPreferencesStorageKey(session.user.id, workspace.id);
+      window.localStorage.setItem(storageKey, JSON.stringify(preferences));
+      setSavedPreferences(preferences);
+      toast.success('Preferences saved on this device.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save preferences.');
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
+
+  if (!session || !workspace) {
+    return <FullPageLoader label="Loading account settings..." />;
+  }
+
+  if (loading && !settings) {
+    return <FullPageLoader label="Loading account settings..." />;
+  }
+
+  const canManageWorkspace = Boolean(settings?.workspace.can_manage);
+  const workspaceDefaults = settings ? resolveWorkspaceFormValues(settings, workspace) : null;
+
+  const profileDirty = profileName.trim() !== (settings?.profile.full_name ?? '').trim();
+  const workspaceDirty = Boolean(
+    workspaceDefaults &&
+    (workspaceName.trim() !== workspaceDefaults.name.trim() ||
+      workspaceSlug.trim() !== workspaceDefaults.slug.trim()),
+  );
+  const preferencesDirty = !arePreferencesEqual(preferences, savedPreferences);
+
+  const profileRole = formatRole(settings?.workspace.role);
+  const workspaceEmailConfigured = settings
+    ? hasConfiguredWorkspaceEmailSender(settings.senders)
+    : false;
+  const displayName = getProfileDisplayName(profileName, settings?.profile.email);
+  const platformLabel = 'Email Marketing';
+  const sessionExpiresDisplay = formatDateTime(
+    session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+  );
+
+  const activeSectionConfig =
+    SETTINGS_SECTIONS.find((section) => section.key === activeSection) ?? SETTINGS_SECTIONS[0];
+
+  const activeMeta = {
+    profile: {
+      dirty: profileDirty,
+      loading: savingProfile,
+      message: 'Save your updated profile details.',
+      onSave: () => void handleSaveProfile(),
+      onReset: () => setProfileName(settings?.profile.full_name ?? ''),
+    },
+    workspace: {
+      dirty: workspaceDirty,
+      loading: savingWorkspace,
+      message: 'Save the shared workspace identity.',
+      onSave: () => void handleSaveWorkspace(),
+        onReset: () => {
+          if (!workspaceDefaults) return;
+          setWorkspaceName(workspaceDefaults.name);
+          setWorkspaceSlug(workspaceDefaults.slug);
+        },
+      },
+    security: {
+      dirty: false,
+      loading: false,
+      message: '',
+      onSave: () => undefined,
+      onReset: () => undefined,
+    },
+    preferences: {
+      dirty: preferencesDirty,
+      loading: savingPreferences,
+      message: 'Save your browser defaults for this workspace.',
+      onSave: () => void handleSavePreferences(),
+      onReset: () => setPreferences(savedPreferences),
+    },
+  }[activeSection];
+
+  function renderProfileSection() {
+    return (
+      <div className="space-y-5" data-guide-id="account-profile-card">
+        <SectionCard
+          title="Profile summary"
+          description="Your identity across records, activity logs, and ownership labels."
+          action={<StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />}
+        >
+          <div className="flex flex-col gap-5 md:flex-row md:items-center">
+            <div className="relative">
+              <motion.div
+                className="absolute -inset-2 rounded-[32px] border border-indigo-300/50"
+                animate={{ rotate: [0, 360], scale: [1, 1.06, 1] }}
+                transition={{
+                  rotate: { duration: 9, repeat: Infinity, ease: 'linear' },
+                  scale: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+                }}
+              />
+              <motion.div
+                className="relative flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-500 text-2xl font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.28)]"
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                {getProfileInitials(profileName, settings?.profile.email)}
+              </motion.div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-2xl font-semibold tracking-tight text-slate-950">{displayName}</div>
+              <div className="mt-1 text-sm text-slate-500">{settings?.profile.email ?? 'No email on file'}</div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />
+                <StatusBadge label={authProviders.join(', ')} />
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Identity', value: 'Synced', tone: 'text-indigo-700 bg-indigo-50 border-indigo-100' },
+              { label: 'Provider', value: authProviders[0] ?? 'Email', tone: 'text-cyan-700 bg-cyan-50 border-cyan-100' },
+              { label: 'Access', value: profileRole, tone: 'text-violet-700 bg-violet-50 border-violet-100' },
+            ].map((item, index) => (
+              <motion.div
+                key={item.label}
+                className={cn('rounded-2xl border px-3 py-2', item.tone)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.06 }}
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">{item.label}</div>
+                <div className="mt-1 text-sm font-semibold">{item.value}</div>
+              </motion.div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Profile details"
+          description="Update personal details used inside this workspace."
+          action={
+            <Button type="button" onClick={() => void handleSaveProfile()} loading={savingProfile} disabled={!profileDirty}>
+              Save profile
+            </Button>
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+              <span className="font-medium">Email</span>
+              <input value={settings?.profile.email ?? ''} disabled className={READ_ONLY_INPUT_CLASSES} />
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+              <span className="font-medium">Full name</span>
+              <input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                className={INPUT_CLASSES}
+                placeholder="Your full name"
+              />
+            </label>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  function renderWorkspaceSection() {
+    return (
+      <div className="space-y-5" data-guide-id="account-workspace-card">
+        <SectionCard
+          title="Workspace identity"
+          description="Shared identity used across templates, imports, automation, and account settings."
+          action={
+            <Button
+              type="button"
+              onClick={() => void handleSaveWorkspace()}
+              loading={savingWorkspace}
+              disabled={!canManageWorkspace || !workspaceDirty}
+            >
+              Save workspace
+            </Button>
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+              <span className="font-medium">Workspace name</span>
+              <input
+                value={workspaceName}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+                className={INPUT_CLASSES}
+                disabled={!canManageWorkspace}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+              <span className="font-medium">Workspace slug</span>
+              <input
+                value={workspaceSlug}
+                onChange={(event) => setWorkspaceSlug(slugify(event.target.value))}
+                className={INPUT_CLASSES}
+                disabled={!canManageWorkspace}
+              />
+            </label>
+
+          </div>
+
+          {!canManageWorkspace ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              This workspace is read-only for your role.
+            </div>
+          ) : null}
+        </SectionCard>
+
+        <SectionCard
+          title="Invite email setup"
+          description="Owner email sender configuration used for team invite emails."
+          action={
+            <StatusBadge
+              label={workspaceEmailConfigured ? 'Configured' : 'Not configured'}
+              tone={workspaceEmailConfigured ? 'green' : 'amber'}
+            />
+          }
+        >
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm leading-6 text-slate-700">
+              {workspaceEmailConfigured
+                ? 'Workspace email sender is configured. Team invite emails can be delivered normally.'
+                : canManageWorkspace
+                  ? 'Configure workspace email before sending team invites.'
+                  : 'Only workspace owners can configure workspace email for invites.'}
+            </p>
+
+            {!workspaceEmailConfigured ? (
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigate('/email')}
+                  disabled={!canManageWorkspace}
+                >
+                  Configure email first
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { label: 'Workspace', value: workspaceName || 'Untitled', icon: BriefcaseBusiness, className: 'from-cyan-500/14 to-blue-500/8 text-cyan-700' },
+            { label: 'Slug', value: workspaceSlug || 'workspace-slug', icon: Globe2, className: 'from-indigo-500/14 to-violet-500/8 text-indigo-700' },
+            { label: 'Platform', value: platformLabel, icon: Sparkles, className: 'from-fuchsia-500/14 to-pink-500/8 text-fuchsia-700' },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <motion.div
+                key={item.label}
+                className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.06 }}
+                whileHover={{ y: -4, rotate: index === 1 ? -0.4 : 0.4 }}
+              >
+                <div className={cn('absolute inset-0 bg-gradient-to-br', item.className)} />
+                <div className="relative flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 shadow-sm">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</div>
+                    <div className="truncate font-semibold text-slate-950">{item.value}</div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <SectionCard
+          title="Role and access"
+          description="Understand what your current workspace role can change."
+          action={<StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />}
+        >
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Current role</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />
+              <StatusBadge label={platformLabel} tone="indigo" />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{getRoleDescription(settings?.workspace.role)}</p>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  function renderSecuritySection() {
+    const securityRows = [
+      {
+        label: 'Sign-in method',
+        value: authProviders.join(', '),
+        helper: 'Provider linked to your current session.',
+        badge: <StatusBadge label="Active" tone="indigo" />,
+        icon: Mail,
+        tone: 'from-indigo-500/12 to-cyan-400/8',
+        gradientClass: 'bg-gradient-to-br from-indigo-500 to-cyan-500', // Add this
+      },
+      {
+        label: 'Email verification',
+        value: user?.email_confirmed_at ? 'Verified' : 'Pending verification',
+        helper: 'Verification status for workspace access.',
+        badge: (
+          <StatusBadge
+            label={user?.email_confirmed_at ? 'Verified' : 'Pending'}
+            tone={user?.email_confirmed_at ? 'green' : 'amber'}
+          />
+        ),
+        icon: ShieldCheck,
+        tone: 'from-emerald-500/12 to-teal-400/8',
+        gradientClass: 'bg-gradient-to-br from-emerald-500 to-teal-500', // Add this
+      },
+      {
+        label: 'Workspace role',
+        value: profileRole,
+        helper: 'Controls shared workspace setting access.',
+        badge: <StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />,
+        icon: UserRound,
+        tone: 'from-violet-500/12 to-indigo-400/8',
+        gradientClass: 'bg-gradient-to-br from-violet-500 to-indigo-500', // Add this
+      },
+      {
+        label: 'Last sign in',
+        value: formatDateTime(user?.last_sign_in_at ?? null),
+        helper: 'Most recent login timestamp.',
+        badge: <StatusBadge label="Recent" tone="indigo" />,
+        icon: Clock3,
+        tone: 'from-cyan-500/12 to-blue-400/8',
+        gradientClass: 'bg-gradient-to-br from-cyan-500 to-blue-500', // Add this
+      },
+      {
+        label: 'Session expires',
+        value: sessionExpiresDisplay,
+        helper: 'Current browser session expiry.',
+        badge: <StatusBadge label="Active session" tone="indigo" />,
+        icon: Lock,
+        tone: 'from-rose-500/10 to-indigo-400/8',
+        gradientClass: 'bg-gradient-to-br from-rose-500 to-orange-500', // Add this
+      },
+    ];
+
+    return (
+      <div className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          {securityRows.map((row, index) => {
+            const Icon = row.icon;
+            return (
+              <motion.div
+                key={row.label}
+                className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                whileHover={{ y: -4 }}
+              >
+                <div className={cn('absolute inset-0 bg-gradient-to-br', row.tone)} />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div className="flex gap-3">
+                    <motion.div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg",
+                        row.gradientClass || "bg-gradient-to-br from-indigo-500 to-cyan-500"
+                      )}
+                      animate={{ scale: [1, 1.08, 1], rotate: [0, 5, -5, 0] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: index * 0.2 }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </motion.div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{row.label}</div>
+                      <div className="mt-2 text-sm font-medium text-slate-950">{row.value}</div>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">{row.helper}</p>
+                    </div>
+                  </div>
+                  {row.badge}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <SectionCard
+          title="Session actions"
+          description="Sign out when you are done or need to switch accounts."
+          action={
+            <Button type="button" variant="secondary" onClick={() => void handleSignOut()}>
+              Sign out
+            </Button>
+          }
+        >
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
+            Signing out ends the current browser session for this account.
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  function renderPreferencesSection() {
+    return (
+      <SectionCard
+        title="Personal preferences"
+        description="Stored for this user and workspace in the current browser."
+        action={
+          <Button
+            type="button"
+            onClick={() => void handleSavePreferences()}
+            loading={savingPreferences}
+            disabled={!preferencesDirty}
+          >
+            Save preferences
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <PreferenceRow
+            label="Timezone"
+            helper="Used for local date and time display."
+            control={
+              <div className="relative">
+                <Globe2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
+                <select
+                  value={preferences.timezone}
+                  onChange={(event) => setPreferences((current) => ({ ...current, timezone: event.target.value }))}
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  {TIMEZONE_OPTIONS.map((timezone) => (
+                    <option key={timezone} value={timezone}>
+                      {timezone}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            }
+          />
+
+          <PreferenceRow
+            label="Date format"
+            helper="Used in lists, cards, and details."
+            control={
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-500" />
+                <select
+                  value={preferences.dateFormat}
+                  onChange={(event) =>
+                    setPreferences((current) => ({
+                      ...current,
+                      dateFormat: event.target.value as DateFormatOption,
+                    }))
+                  }
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                  <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                  <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                </select>
+              </div>
+            }
+          />
+
+          <PreferenceRow
+            label="Default landing page"
+            helper="Choose your home base when returning to Email Engine."
+            control={
+              <div className="relative">
+                <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-500" />
+                <select
+                  value={preferences.landingPage}
+                  onChange={(event) =>
+                    setPreferences((current) => ({
+                      ...current,
+                      landingPage: event.target.value as LandingPageOption,
+                    }))
+                  }
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  <option value="/email">Email</option>
+                  <option value="/account">Account</option>
+                </select>
+              </div>
+            }
+          />
+        </div>
+      </SectionCard>
+    );
+  }
+
+  function renderActiveSection() {
+    switch (activeSection) {
+      case 'profile':
+        return renderProfileSection();
+      case 'workspace':
+        return renderWorkspaceSection();
+      case 'security':
+        return renderSecuritySection();
+      case 'preferences':
+        return renderPreferencesSection();
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, ease: 'easeOut' }}
+        className="space-y-5"
+      >
+        <div className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/70 p-1 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(99,102,241,0.16),transparent_30%),radial-gradient(circle_at_90%_18%,rgba(34,211,238,0.14),transparent_28%)]" />
+          <motion.div
+            className="pointer-events-none absolute right-24 top-8 h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.7)]"
+            animate={{ scale: [0.8, 1.7, 0.8], opacity: [0.35, 0.95, 0.35] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <div className="relative">
+            <PageHeader
+              eyebrow="Account"
+              title="Account"
+              description="Manage your profile, workspace, security, and preferences."
+              actions={
+                <motion.div whileHover={{ y: -2, rotate: 0.5 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void loadSettings()}
+                    data-guide-id="account-refresh"
+                    className="border-indigo-100 bg-white/90 shadow-sm hover:border-indigo-200"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                    Refresh
+                  </Button>
+                </motion.div>
+              }
+            />
+          </div>
+        </div>
+
+        <Card className="overflow-hidden rounded-[34px] border-white/70 bg-white/85 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
+            <SettingsNav activeSection={activeSection} onSelect={setActiveSection} />
+
+            <main className="min-w-0 flex-1 bg-white/80">
+              <div className="relative overflow-hidden border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div className={cn('absolute inset-0 bg-gradient-to-br opacity-90', SECTION_ACCENTS[activeSection].glow)} />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="relative">
+                    <div className={cn('text-xs uppercase tracking-[0.22em]', SECTION_ACCENTS[activeSection].text)}>
+                      {activeSectionConfig.label}
+                    </div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      {activeSectionConfig.label}
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                      {activeSectionConfig.description}
+                    </p>
+                  </div>
+
+                  {activeSection === 'workspace' ? (
+                    <StatusBadge
+                      label={canManageWorkspace ? 'Can manage workspace' : 'Read only'}
+                      tone={canManageWorkspace ? 'indigo' : 'amber'}
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="px-5 py-5 sm:px-6">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={activeSection}
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -12 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                  >
+                    {renderActiveSection()}
+                  </motion.div>
+                </AnimatePresence>
+
+                <UnsavedChangesBar
+                  visible={activeMeta.dirty}
+                  message={activeMeta.message}
+                  onSave={activeMeta.onSave}
+                  onReset={activeMeta.onReset}
+                  loading={activeMeta.loading}
+                />
+              </div>
+            </main>
+          </div>
+        </Card>
+      </motion.div>
+    </WorkspaceLayout>
+  );
+}

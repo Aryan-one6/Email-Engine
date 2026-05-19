@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/email-followup-dispatch",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/email-manual-dispatch",
+      "schedule": "* * * * *"
+    },
+    {
+  "path": "/api/cron/voice-jobs-dispatch",
+  "schedule": "* * * * *"
+}
+
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

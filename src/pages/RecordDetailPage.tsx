@@ -1,0 +1,402 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
+import type { AppPageGuide } from '../context/AppGuideContext';
+import { RecordActivityTimeline } from '../components/records/RecordActivityTimeline';
+import { RecordForm } from '../components/records/RecordForm';
+import { RecordNotesSection } from '../components/records/RecordNotesSection';
+import { RecordTasksSection } from '../components/records/RecordTasksSection';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { FullPageLoader } from '../components/ui/FullPageLoader';
+import { SectionSkeleton } from '../components/ui/SectionSkeleton';
+import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
+import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
+import {
+  addRecordNote,
+  createRecordTask,
+  getCachedRecordDetails,
+  getRecordDetails,
+  updateRecord,
+} from '../lib/crm-service';
+import type { CrmWorkspaceConfig, RecordDetailResponse, RecordSaveInput } from '../lib/crm-types';
+import { controlLeadSequence, enrollLead } from '../lib/email-service';
+
+function findSourceName(config: CrmWorkspaceConfig, sourceId: string | null) {
+  return config.sources.find((source) => source.id === sourceId)?.name ?? 'No source';
+}
+
+function findAssigneeName(config: CrmWorkspaceConfig, assigneeUserId: string | null) {
+  return config.assignees.find((assignee) => assignee.userId === assigneeUserId)?.fullName ?? 'Unassigned';
+}
+
+function formatStatusLabel(status: string | null) {
+  if (!status) {
+    return 'New';
+  }
+
+  return status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function RecordDetailPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { recordId = '' } = useParams();
+  const { session, workspace, signOut } = useAuth();
+  const workspaceId = workspace?.id ?? null;
+  const { config, configError, configLoading, configRefreshing } = useCrmWorkspace();
+  const [detail, setDetail] = useState<RecordDetailResponse | null>(() =>
+    workspaceId && recordId ? getCachedRecordDetails(workspaceId, recordId) : null,
+  );
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(() => !detail);
+  const [detailRefreshing, setDetailRefreshing] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const [sequenceActioning, setSequenceActioning] = useState<null | 'stop' | 'resume'>(null);
+
+  const visibleDetail = detail?.record.id === recordId ? detail : null;
+
+  async function handleSignOut() {
+    await signOut();
+    toast.success('Signed out successfully.');
+    navigate('/signin', { replace: true, state: { existingUser: true } });
+  }
+
+  async function loadRecord() {
+    if (!session || !workspaceId || !recordId) {
+      return;
+    }
+
+    const cachedDetail = getCachedRecordDetails(workspaceId, recordId);
+
+    if (cachedDetail) {
+      setDetail(cachedDetail);
+      setDetailLoading(false);
+      setDetailRefreshing(true);
+    } else {
+      setDetailLoading(true);
+    }
+
+    setDetailError(null);
+
+    try {
+      const nextDetail = await getRecordDetails(session, workspaceId, recordId);
+      setDetail(nextDetail);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load record.';
+      setDetailError(message);
+      toast.error(message);
+    } finally {
+      setDetailLoading(false);
+      setDetailRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!workspaceId || !recordId) {
+      setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
+      setDetailRefreshing(false);
+      return;
+    }
+
+    const cachedDetail = getCachedRecordDetails(workspaceId, recordId);
+
+    setDetail(cachedDetail);
+    setDetailError(null);
+    setDetailLoading(!cachedDetail);
+    setDetailRefreshing(Boolean(cachedDetail));
+
+    void loadRecord();
+  }, [workspaceId, recordId]);
+
+  useEffect(() => {
+    if (location.hash !== '#tasks' || !visibleDetail) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('tasks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [location.hash, visibleDetail]);
+
+  async function handleSave(payload: RecordSaveInput) {
+    if (!session || !visibleDetail) return;
+
+    try {
+      const nextDetail = await updateRecord(session, visibleDetail.record.id, payload);
+      setDetail(nextDetail);
+      toast.success('Record updated.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update record.';
+      toast.error(message);
+      throw error;
+    }
+  }
+
+  async function handleAddNote(body: string) {
+    if (!session || !workspaceId || !visibleDetail) return;
+    await addRecordNote(session, workspaceId, visibleDetail.record.id, body);
+    await loadRecord();
+    toast.success('Note added.');
+  }
+
+  async function handleCreateTask(payload: {
+    title: string;
+    description: string | null;
+    priority: string;
+    due_at: string | null;
+    assigned_to: string | null;
+  }) {
+    if (!session || !workspaceId || !visibleDetail) return;
+    await createRecordTask(session, workspaceId, visibleDetail.record.id, payload);
+    await loadRecord();
+    toast.success('Task created.');
+  }
+
+  async function handleEnrollEmail() {
+    if (!visibleDetail) return;
+    setEnrolling(true);
+    try {
+      const result = await enrollLead(visibleDetail.record.id);
+      toast.success(result.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to enroll lead.';
+      toast.error(message);
+    } finally {
+      setEnrolling(false);
+    }
+  }
+
+  async function handleStopSequence() {
+    if (!visibleDetail || !workspaceId) return;
+    setSequenceActioning('stop');
+    try {
+      await controlLeadSequence(workspaceId, visibleDetail.record.id, 'stop');
+      toast.success('Email sequence stopped for this lead.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to stop sequence.';
+      toast.error(message);
+    } finally {
+      setSequenceActioning(null);
+    }
+  }
+
+  async function handleResumeSequence() {
+    if (!visibleDetail || !workspaceId) return;
+    setSequenceActioning('resume');
+    try {
+      await controlLeadSequence(workspaceId, visibleDetail.record.id, 'resume');
+      toast.success('Email sequence resumed for this lead.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resume sequence.';
+      toast.error(message);
+    } finally {
+      setSequenceActioning(null);
+    }
+  }
+
+  if (!session || !workspace || !workspaceId) {
+    return <FullPageLoader label="Loading record details..." />;
+  }
+
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'record-detail',
+      title: 'Work a single record in depth',
+      summary:
+        'This detail page brings record fields, notes, tasks, activity history, and email-sequence controls together so users can manage one record end to end.',
+      nextStep:
+        visibleDetail
+          ? 'Review the main form first, then update notes, tasks, or email follow-up based on the latest contact status.'
+          : 'Wait for the record detail to finish loading so the full activity and editing view becomes available.',
+      highlights: ['Full record editing', 'Tasks and notes', 'Email follow-up controls'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'record-detail-header',
+          title: 'Orient around the record header',
+          body: 'This header confirms which record you are editing and gives a quick path back to the queue.',
+          targetId: 'record-detail-header',
+        },
+        {
+          id: 'record-detail-form',
+          title: 'Update the record fields',
+          body: 'The main form keeps lead details and contact progress in one place.',
+          targetId: 'record-detail-form',
+        },
+        {
+          id: 'record-detail-tasks',
+          title: 'Capture next actions',
+          body: 'Use notes and tasks to keep the record operationally actionable for the rest of the team.',
+          targetId: 'record-detail-tasks',
+          placement: 'top',
+        },
+      ],
+    }),
+    [visibleDetail],
+  );
+
+  usePageGuide(guide);
+
+  return (
+    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
+      <div className="space-y-5">
+        <div data-guide-id="record-detail-header">
+          <Link to="/records" className="text-sm text-accent-blue transition hover:text-accent-blue">
+            Back to records
+          </Link>
+          <h2 className="mt-2 font-display text-3xl text-slate-900">{visibleDetail?.record.title ?? 'Record details'}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Edit lead fields, notes, tasks, and timeline in one shared view.
+          </p>
+        </div>
+
+        {configRefreshing || detailRefreshing ? (
+          <Card className="p-4 text-sm text-slate-600">Refreshing record data in the background...</Card>
+        ) : null}
+
+        {configError && !config ? (
+          <Card className="border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{configError}</Card>
+        ) : null}
+
+        {detailError && !visibleDetail ? (
+          <Card className="border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{detailError}</Card>
+        ) : null}
+
+        {config && visibleDetail ? (
+          <>
+            <div className="grid gap-4 lg:grid-cols-4">
+              <Card className="p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Status</div>
+                <div className="mt-3 font-display text-2xl text-slate-900">
+                  {formatStatusLabel(visibleDetail.record.status)}
+                </div>
+              </Card>
+              <Card className="p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Source</div>
+                <div className="mt-3 font-display text-2xl text-slate-900">
+                  {findSourceName(config, visibleDetail.record.source_id)}
+                </div>
+              </Card>
+              <Card className="p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Assignee</div>
+                <div className="mt-3 font-display text-2xl text-slate-900">
+                  {findAssigneeName(config, visibleDetail.record.assignee_user_id)}
+                </div>
+              </Card>
+              <Card className="p-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Updated</div>
+                <div className="mt-3 text-sm leading-7 text-slate-700">
+                  {new Date(visibleDetail.record.updated_at).toLocaleString()}
+                </div>
+              </Card>
+            </div>
+
+            {/* ── Email Sequence Enrollment ── */}
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between gap-4 px-6 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">Email Follow-up Sequence</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Automatically send a series of follow-up emails to this lead.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={enrolling}
+                    onClick={() => void handleEnrollEmail()}
+                  >
+                    {enrolling ? 'Enrolling…' : 'Enroll in Sequence'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    loading={sequenceActioning === 'stop'}
+                    onClick={() => void handleStopSequence()}
+                  >
+                    {sequenceActioning === 'stop' ? 'Stopping…' : 'Stop'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    loading={sequenceActioning === 'resume'}
+                    onClick={() => void handleResumeSequence()}
+                  >
+                    {sequenceActioning === 'resume' ? 'Resuming…' : 'Resume'}
+                  </Button>
+                </div>
+              </div>
+              <div className="border-t border-slate-100 bg-slate-50 px-6 py-2.5">
+                <p className="text-[11px] text-slate-400">
+                  Requires email automation enabled and a default sender connected in{' '}
+                  <a href="/email" className="text-violet-500 underline hover:text-violet-700">Email Settings</a>.
+                </p>
+              </div>
+            </Card>
+
+            <div data-guide-id="record-detail-form">
+              <RecordForm
+                key={visibleDetail.record.id}
+                workspaceId={workspaceId}
+                config={config}
+                initialRecord={visibleDetail.record}
+                initialCustom={visibleDetail.custom}
+                submitLabel="Save changes"
+                onSubmit={handleSave}
+              />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" data-guide-id="record-detail-tasks">
+              <RecordNotesSection notes={visibleDetail.notes} onAddNote={handleAddNote} />
+              <div id="tasks">
+                <RecordTasksSection
+                  tasks={visibleDetail.tasks}
+                  assignees={config.assignees}
+                  onCreateTask={handleCreateTask}
+                />
+              </div>
+            </div>
+
+            <RecordActivityTimeline
+              activities={visibleDetail.activities}
+              config={config}
+              record={visibleDetail.record}
+              notes={visibleDetail.notes}
+              tasks={visibleDetail.tasks}
+            />
+          </>
+        ) : detailLoading || configLoading ? (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionSkeleton title="Record summary" rows={2} />
+              <SectionSkeleton title="Record summary" rows={2} />
+            </div>
+            <SectionSkeleton title="Record form" rows={6} />
+          </>
+        ) : null}
+      </div>
+    </WorkspaceLayout>
+  );
+}

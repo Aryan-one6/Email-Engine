@@ -1,0 +1,82 @@
+project_id = "cvrbjijusaqejmclqgmv"
+
+# Supabase now issues asymmetric JWTs (ES256) in this project.
+# These functions perform auth in code via userClient.auth.getUser(),
+# so disable legacy edge-runtime JWT verification to avoid:
+# UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM.
+[functions.account-settings-get]
+verify_jwt = false
+[functions.account-settings-sender-add]
+verify_jwt = false
+[functions.account-settings-update]
+verify_jwt = false
+[functions.complete-signup]
+verify_jwt = false
+[functions.email-enroll-lead]
+verify_jwt = false
+[functions.email-followup-dispatch]
+verify_jwt = false
+[functions.email-campaign-enumerate-recipients]
+verify_jwt = false
+[functions.email-campaign-send-batch]
+verify_jwt = false
+[functions.email-campaign-template-options]
+verify_jwt = false
+[functions.email-manual-send]
+verify_jwt = false
+[functions.email-manual-schedule]
+verify_jwt = false
+[functions.email-manual-dispatch]
+verify_jwt = false
+[functions.email-oauth-callback]
+verify_jwt = false
+[functions.email-oauth-start]
+verify_jwt = false
+[functions.email-sequence-control]
+verify_jwt = false
+[functions.get-user-workspace]
+verify_jwt = false
+[functions.workspace-team-get]
+verify_jwt = false
+[functions.workspace-team-invite]
+verify_jwt = false
+[functions.workspace-team-remove]
+verify_jwt = false
+[functions.import-job-create]
+verify_jwt = false
+[functions.import-analyze]
+verify_jwt = false
+[functions.import-mapping-approve]
+verify_jwt = false
+[functions.import-profile-resolve]
+verify_jwt = false
+[functions.import-profile-save]
+verify_jwt = false
+[functions.import-intelligence-config-get]
+verify_jwt = false
+[functions.import-intelligence-config-save]
+verify_jwt = false
+[functions.record-add-note]
+verify_jwt = false
+[functions.record-create]
+verify_jwt = false
+[functions.record-create-task]
+verify_jwt = false
+[functions.record-get]
+verify_jwt = false
+[functions.record-move-stage]
+verify_jwt = false
+[functions.record-update]
+verify_jwt = false
+[functions.records-config]
+verify_jwt = false
+[functions.records-custom-fields-list]
+verify_jwt = false
+[functions.records-custom-fields-update]
+verify_jwt = false
+[functions.records-list]
+verify_jwt = false
+[functions.email-assets-bootstrap]
+verify_jwt = false
+[functions.email-assets-upload]
+verify_jwt = false

@@ -1,0 +1,237 @@
+import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { completePendingSignupIfAvailable } from '../../lib/auth-helpers';
+import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
+import { getDashboardPath } from '../../lib/utils';
+import { useAuth } from '../../hooks/useAuth';
+import { usePageGuide } from '../../hooks/useAppGuide';
+import { Button } from '../ui/Button';
+import { ConfigurationNotice } from '../ui/ConfigurationNotice';
+import { Input } from '../ui/Input';
+
+const rememberedEmailKey = 'coreflow.remembered-email';
+const existingUserSignedOutFlagKey = 'coreflow.existing-user-signed-out';
+const dashboardSetupPopupWorkspaceIdKey = 'coreflow.dashboard.setup-popup-workspace-id';
+type SignInRouteState = { prefillEmail?: string; existingUser?: boolean } | null;
+
+export function SignInForm() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isSupabaseReady, refreshWorkspace } = useAuth();
+  const routeState = location.state as SignInRouteState;
+  const searchParams = new URLSearchParams(location.search);
+  const inviteMode = searchParams.get('invite') === '1';
+  const invitedEmail = searchParams.get('email')?.trim() ?? '';
+  const hideSignUpOption = Boolean(
+    routeState?.existingUser ||
+      (typeof window !== 'undefined' && window.sessionStorage.getItem(existingUserSignedOutFlagKey) === '1'),
+  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const projectRef = getConfiguredSupabaseProjectRef();
+
+  usePageGuide({
+    key: 'auth-signin',
+    title: 'Sign in to your workspace',
+    summary:
+      'Use this page to access your Email Engine workspace. After sign in, Email Engine restores your workspace and routes you into email operations.',
+    nextStep: 'Enter your workspace email and password, then continue into Email Engine.',
+    highlights: ['Workspace-aware sign in', 'Remember me support', 'Fast dashboard routing'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'signin-email',
+        title: 'Start with the account email',
+        body: 'Use the email linked to your workspace so Email Engine can restore the correct membership and routing.',
+        targetId: 'sign-in-email',
+      },
+      {
+        id: 'signin-password',
+        title: 'Enter the current password',
+        body: 'This signs you into Supabase Auth and unlocks the shared email workspace attached to this account.',
+        targetId: 'sign-in-password',
+      },
+      {
+        id: 'signin-submit',
+        title: 'Enter the workspace',
+        body: 'When you submit, Email Engine refreshes your workspace access and sends you into the email workspace automatically.',
+        targetId: 'sign-in-submit',
+        placement: 'top',
+      },
+    ],
+  });
+
+  useEffect(() => {
+    const stateEmail = routeState?.prefillEmail;
+    const storedEmail = window.localStorage.getItem(rememberedEmailKey);
+    setEmail(stateEmail ?? (invitedEmail || storedEmail || ''));
+  }, [invitedEmail, routeState]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: typeof errors = {};
+    if (!email.trim()) nextErrors.email = 'Email is required.';
+    if (!password) nextErrors.password = 'Password is required.';
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    if (!isSupabaseReady) {
+      toast.error('Add your Supabase environment variables to enable sign in.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (rememberMe) {
+        window.localStorage.setItem(rememberedEmailKey, email.trim());
+      } else {
+        window.localStorage.removeItem(rememberedEmailKey);
+      }
+
+      const workspace = await refreshWorkspace(data.session);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(existingUserSignedOutFlagKey);
+      }
+
+      if (workspace) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(dashboardSetupPopupWorkspaceIdKey, workspace.id);
+        }
+        toast.success('Welcome back to Email Engine.');
+        navigate(getDashboardPath(workspace), { replace: true });
+        return;
+      }
+
+      const pendingWorkspace = await completePendingSignupIfAvailable(data.session, data.user);
+      if (pendingWorkspace) {
+        await refreshWorkspace(data.session);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(dashboardSetupPopupWorkspaceIdKey, pendingWorkspace.id);
+        }
+        toast.success('Workspace created. Welcome to Email Engine.');
+        navigate(getDashboardPath(pendingWorkspace), { replace: true });
+        return;
+      }
+
+      toast.success('Welcome back to Email Engine.');
+      navigate('/onboarding/complete', { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sign in.';
+      if (message.toLowerCase().includes('invalid login credentials')) {
+        const projectLabel = projectRef ? ` (${projectRef})` : '';
+        toast.error(
+          `Invalid email or password for this Supabase project${projectLabel}. Verify you are signing in to the correct project.`,
+        );
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="space-y-7" onSubmit={handleSubmit}>
+      {!isSupabaseReady ? <ConfigurationNotice /> : null}
+      <div className="grid gap-6">
+        <Input
+          label="Email"
+          fieldSize="lg"
+          type="email"
+          data-guide-id="sign-in-email"
+          placeholder="you@company.com"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          error={errors.email}
+        />
+        <Input
+          label="Password"
+          fieldSize="lg"
+          type={showPassword ? 'text' : 'password'}
+          data-guide-id="sign-in-password"
+          placeholder="Enter your password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          error={errors.password}
+          rightElement={
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+              className="text-slate-600 transition hover:text-slate-900"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <label className="inline-flex items-center gap-2.5 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4 rounded border-indigo-200 bg-white text-indigo-600 focus:ring-indigo-500"
+          />
+          Remember me
+        </label>
+        <button
+          type="button"
+          onClick={() => toast.info('Password reset UI is next on the roadmap.')}
+          className="text-xs font-medium text-accent-blue transition hover:text-accent-blue"
+        >
+          Forgot password?
+        </button>
+      </div>
+
+      <Button
+        type="submit"
+        size="md"
+        className="h-11 w-full rounded-lg border-indigo-700 bg-indigo-700 text-base font-semibold hover:bg-indigo-800 active:bg-indigo-900"
+        loading={loading}
+      >
+        <span>Sign In</span>
+        <LogIn className="h-4 w-4" />
+      </Button>
+
+      <p className="border-t border-slate-200 pt-4 text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500">
+        Secure workspace routing | Session restored automatically
+      </p>
+
+      {!hideSignUpOption ? (
+        <p className="text-center text-sm leading-6 text-slate-700">
+          New to Email Engine?{' '}
+          <Link
+            to={inviteMode ? `/signup?invite=1&email=${encodeURIComponent(email.trim() || invitedEmail)}` : '/signup'}
+            className="font-medium text-accent-blue transition hover:text-accent-blue"
+          >
+            Create your account
+          </Link>
+        </p>
+      ) : null}
+    </form>
+  );
+}
