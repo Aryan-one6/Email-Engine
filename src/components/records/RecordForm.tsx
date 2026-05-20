@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { CrmWorkspaceConfig, RecordSaveInput, RecordSummary } from '../../lib/crm-types';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 
 interface RecordFormProps {
