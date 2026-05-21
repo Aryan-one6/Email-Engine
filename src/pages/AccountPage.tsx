@@ -25,6 +25,7 @@ import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
+import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
 import {
@@ -800,7 +801,17 @@ export function AccountPage() {
   }
 
   if (loading && !settings) {
-    return <FullPageLoader label="Loading account settings..." />;
+    return (
+      <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
+        <div className="space-y-5">
+          <SectionSkeleton title="Loading account overview" rows={2} />
+          <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <SectionSkeleton title="Loading settings menu" rows={4} />
+            <SectionSkeleton title="Loading account section" rows={6} />
+          </div>
+        </div>
+      </WorkspaceLayout>
+    );
   }
 
   const canManageWorkspace = Boolean(settings?.workspace.can_manage);

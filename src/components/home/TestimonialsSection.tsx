@@ -4,7 +4,7 @@ import { LandingReveal, LandingRevealItem, LandingStagger } from './LandingRevea
 const testimonials = [
   {
     quote:
-      "CoreFlow's automation handles repetitive follow-ups in real time, so our team only focuses on high-intent opportunities.",
+      "Email Intelligence's automation handles repetitive follow-ups in real time, so our team only focuses on high-intent opportunities.",
     name: 'Sarah Jenkins',
     role: 'Director, Prime Properties',
     initials: 'SJ',
@@ -32,7 +32,7 @@ export function TestimonialsSection() {
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">Testimonials</p>
           <h2 className="mt-2 font-display text-3xl font-semibold text-slate-950 sm:text-4xl">
-            What teams say after switching to CoreFlow
+            What teams say after switching to Email Intelligence
           </h2>
         </div>
 

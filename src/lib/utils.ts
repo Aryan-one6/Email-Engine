@@ -27,7 +27,7 @@ export function getCrmOption(crmType: CRMType) {
 
 export function getDashboardPath(workspace: Pick<WorkspaceSummary, 'crmType'> | { crmType: CRMType }) {
   void workspace;
-  return '/email';
+  return '/dashboard';
 }
 
 export function formatCrmLabel(crmType: CRMType) {

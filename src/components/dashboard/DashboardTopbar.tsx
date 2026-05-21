@@ -1,13 +1,14 @@
-import { Bell, Building2, LogOut, Search } from 'lucide-react';
+import { Bell, Building2, LogOut, Menu, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceSummary } from '../../lib/types';
 
 interface DashboardTopbarProps {
   workspace: WorkspaceSummary;
   onSignOut: () => Promise<void>;
+  onMenuToggle?: () => void;
 }
 
-export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) {
+export function DashboardTopbar({ workspace, onSignOut, onMenuToggle }: DashboardTopbarProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const notifications = [
@@ -52,22 +53,34 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/35 bg-gradient-to-r from-[#f8fbff]/82 via-white/76 to-[#f6faff]/82 backdrop-blur-xl shadow-[0_10px_28px_-24px_rgba(15,23,42,0.55)]">
-      <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 lg:px-6 2xl:px-8">
+      <div className="relative mx-auto flex h-16 w-full max-w-[1680px] items-center gap-2 px-3 sm:px-4 lg:px-6 2xl:px-8">
+        <button
+          type="button"
+          onClick={onMenuToggle}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/75 bg-white/85 text-slate-600 shadow-[0_8px_20px_-16px_rgba(15,23,42,0.55)] transition hover:bg-white hover:text-slate-800 lg:hidden"
+          aria-label="Open menu"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        <div className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center lg:hidden">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/70 bg-white/85 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.5)]">
+            <img src="/favicon.webp" alt="Platform icon" className="h-7 w-7 object-contain" />
+          </div>
+        </div>
+
         {/* Search bar */}
-        <div className="hidden w-[360px] items-center gap-2.5 rounded-2xl border border-white/65 bg-white/65 px-3.5 py-2 text-sm text-slate-400 shadow-[0_8px_20px_-16px_rgba(15,23,42,0.6)] transition hover:border-slate-200 hover:bg-white/80 md:flex">
+        <div className="hidden w-[360px] items-center gap-2.5 rounded-2xl border border-white/65 bg-white/65 px-3.5 py-2 text-sm text-slate-400 shadow-[0_8px_20px_-16px_rgba(15,23,42,0.6)] transition hover:border-slate-200 hover:bg-white/80 lg:flex">
           <Search className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="truncate">Search templates, campaigns, or leads</span>
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-2.5">
           {/* Workspace selector chip */}
-          <div className="flex cursor-default items-center gap-2 rounded-2xl border border-white/70 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.55)]">
+          <div className="hidden cursor-default items-center gap-2 rounded-2xl border border-white/70 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.55)] lg:flex">
             <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             <span className="max-w-[150px] truncate">{workspace.name}</span>
-            <span className="inline-flex items-center rounded-full border border-indigo-200/80 bg-indigo-50/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-700">
-              Email Marketing
-            </span>
           </div>
 
           {/* Bell */}
@@ -112,7 +125,7 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
           {/* Sign out */}
           <button
             onClick={() => void onSignOut()}
-            className="flex items-center gap-1.5 rounded-2xl border border-white/75 bg-white/80 px-3.5 py-1.5 text-sm font-semibold text-slate-600 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.58)] transition hover:bg-white hover:text-slate-800"
+            className="hidden items-center gap-1.5 rounded-2xl border border-white/75 bg-white/80 px-3.5 py-1.5 text-sm font-semibold text-slate-600 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.58)] transition hover:bg-white hover:text-slate-800 lg:flex"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sign Out

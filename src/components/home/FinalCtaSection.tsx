@@ -31,7 +31,7 @@ export function FinalCtaSection() {
           </Link>
         </div>
 
-        <p className="mt-5 text-sm font-medium text-indigo-100">Join 400+ teams scaling operations with CoreFlow. No credit card required.</p>
+        <p className="mt-5 text-sm font-medium text-indigo-100">Join 400+ teams scaling operations with Email Intelligence. No credit card required.</p>
       </LandingReveal>
     </section>
   );

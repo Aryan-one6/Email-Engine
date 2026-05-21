@@ -41,7 +41,7 @@ export function WorkspaceSetupFields({
               <Input
                 label="Workspace name"
                 data-guide-id={guideIds?.workspaceName}
-                placeholder="CoreFlow Ventures"
+                placeholder="Email Intelligence Ventures"
                 value={workspaceName}
                 onChange={(event) => onWorkspaceNameChange(event.target.value)}
                 error={errors.workspaceName}
@@ -54,7 +54,7 @@ export function WorkspaceSetupFields({
               <Input
                 label="Workspace slug"
                 data-guide-id={guideIds?.workspaceSlug}
-                placeholder="coreflow-ventures"
+                placeholder="Email Intelligence-ventures"
                 value={workspaceSlug}
                 onChange={(event) => onWorkspaceSlugChange(event.target.value)}
                 error={errors.workspaceSlug}

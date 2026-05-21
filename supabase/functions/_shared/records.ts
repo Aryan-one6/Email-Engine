@@ -68,9 +68,25 @@ const recordStatuses = new Set([
   'interested',
   'not_interested',
 ]);
+const legacyRecordStatuses = new Set(['open', 'qualified', 'nurturing', 'closed']);
 const recordPriorities = new Set(['low', 'medium', 'high']);
 const taskPriorities = new Set(['low', 'medium', 'high']);
-const customFieldDefinitionRelation = 'custom_field_definitions!custom_field_values_field_definition_id_fkey';
+
+interface CustomFieldDefinitionKeyRow {
+  id: string;
+  field_key: string;
+}
+
+interface CustomFieldValueRawRow {
+  entity_id?: string;
+  field_definition_id: string;
+  value_text: string | null;
+  value_number: number | string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_datetime: string | null;
+  value_json: Json | null;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -83,6 +99,41 @@ function normalizeNullableString(value: unknown) {
 
 function isUniqueViolation(error: unknown) {
   return isPlainObject(error) && typeof error.code === 'string' && error.code === '23505';
+}
+
+function isRecordsStatusConstraintViolation(error: unknown) {
+  if (!isPlainObject(error)) {
+    return false;
+  }
+
+  const code = typeof error.code === 'string' ? error.code : '';
+  const message = typeof error.message === 'string' ? error.message : '';
+  return code === '23514' && message.includes('records_status_check');
+}
+
+function toLegacyRecordStatus(status: string | null | undefined) {
+  if (!status) {
+    return status ?? null;
+  }
+
+  if (legacyRecordStatuses.has(status)) {
+    return status;
+  }
+
+  switch (status) {
+    case 'new':
+      return 'open';
+    case 'email_sent':
+      return 'nurturing';
+    case 'mobile_contacted':
+    case 'replied':
+    case 'interested':
+      return 'qualified';
+    case 'not_interested':
+      return 'closed';
+    default:
+      return status;
+  }
 }
 
 function normalizeEnumValue(value: unknown, allowed: Set<string>, errorLabel: string) {
@@ -112,11 +163,11 @@ function normalizeTaskPriority(value: unknown) {
 }
 
 function synchronizeRecordStatus(requestedStatus: string | null | undefined, stageIsClosed: boolean) {
-  if (requestedStatus && recordStatuses.has(requestedStatus)) {
+  if (requestedStatus && (recordStatuses.has(requestedStatus) || legacyRecordStatuses.has(requestedStatus))) {
     return requestedStatus;
   }
 
-  return stageIsClosed ? 'closed' : 'new';
+  return stageIsClosed ? 'not_interested' : 'new';
 }
 
 function isEmptyValue(value: unknown) {
@@ -221,12 +272,38 @@ async function getFieldDefinitions(serviceClient: EdgeClient, workspaceId: strin
     .filter((field) => !isLegacyRecordFieldKey(field.field_key));
 }
 
-async function getExistingCustomValues(serviceClient: EdgeClient, recordId: string) {
+async function getFieldKeyByDefinitionId(serviceClient: EdgeClient, workspaceId: string) {
+  const { data, error } = await serviceClient
+    .from('custom_field_definitions')
+    .select('id, field_key')
+    .eq('workspace_id', workspaceId)
+    .eq('entity_type', 'record');
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const map = new Map<string, string>();
+
+  for (const row of (data ?? []) as CustomFieldDefinitionKeyRow[]) {
+    if (!row.id || !row.field_key || isLegacyRecordFieldKey(row.field_key)) {
+      continue;
+    }
+
+    map.set(row.id, row.field_key);
+  }
+
+  return map;
+}
+
+async function getExistingCustomValues(serviceClient: EdgeClient, workspaceId: string, recordId: string) {
+  const fieldKeyByDefinitionId = await getFieldKeyByDefinitionId(serviceClient, workspaceId);
   const { data, error } = await serviceClient
     .from('custom_field_values')
     .select(
-      `field_definition_id, ${customFieldDefinitionRelation}!inner(field_key), value_text, value_number, value_boolean, value_date, value_datetime, value_json`,
+      'field_definition_id, value_text, value_number, value_boolean, value_date, value_datetime, value_json',
     )
+    .eq('workspace_id', workspaceId)
     .eq('entity_type', 'record')
     .eq('entity_id', recordId);
 
@@ -236,24 +313,24 @@ async function getExistingCustomValues(serviceClient: EdgeClient, recordId: stri
 
   const values = new Map<string, unknown>();
 
-  for (const row of data ?? []) {
-    const definitions = Array.isArray(row.custom_field_definitions)
-      ? row.custom_field_definitions[0]
-      : row.custom_field_definitions;
+  for (const row of (data ?? []) as CustomFieldValueRawRow[]) {
+    const fieldKey = fieldKeyByDefinitionId.get(row.field_definition_id);
 
-    if (definitions?.field_key) {
-      values.set(
-        definitions.field_key,
-        serializeCustomValue({
-          value_text: row.value_text,
-          value_number: row.value_number,
-          value_boolean: row.value_boolean,
-          value_date: row.value_date,
-          value_datetime: row.value_datetime,
-          value_json: row.value_json,
-        }),
-      );
+    if (!fieldKey) {
+      continue;
     }
+
+    values.set(
+      fieldKey,
+      serializeCustomValue({
+        value_text: row.value_text,
+        value_number: row.value_number,
+        value_boolean: row.value_boolean,
+        value_date: row.value_date,
+        value_datetime: row.value_datetime,
+        value_json: row.value_json,
+      }),
+    );
   }
 
   return values;
@@ -526,10 +603,11 @@ async function writeActivity(
 }
 
 async function fetchCustomValuesMap(serviceClient: EdgeClient, workspaceId: string, recordId: string) {
+  const fieldKeyByDefinitionId = await getFieldKeyByDefinitionId(serviceClient, workspaceId);
   const { data, error } = await serviceClient
     .from('custom_field_values')
     .select(
-      `value_text, value_number, value_boolean, value_date, value_datetime, value_json, ${customFieldDefinitionRelation}!inner(field_key, label, field_type)`,
+      'field_definition_id, value_text, value_number, value_boolean, value_date, value_datetime, value_json',
     )
     .eq('workspace_id', workspaceId)
     .eq('entity_type', 'record')
@@ -541,14 +619,14 @@ async function fetchCustomValuesMap(serviceClient: EdgeClient, workspaceId: stri
 
   const result: Record<string, unknown> = {};
 
-  for (const row of data ?? []) {
-    const definition = Array.isArray(row.custom_field_definitions)
-      ? row.custom_field_definitions[0]
-      : row.custom_field_definitions;
+  for (const row of (data ?? []) as CustomFieldValueRawRow[]) {
+    const fieldKey = fieldKeyByDefinitionId.get(row.field_definition_id);
 
-    if (!definition?.field_key) continue;
+    if (!fieldKey) {
+      continue;
+    }
 
-    result[definition.field_key] = serializeCustomValue({
+    result[fieldKey] = serializeCustomValue({
       value_text: row.value_text,
       value_number: row.value_number,
       value_boolean: row.value_boolean,
@@ -708,11 +786,12 @@ export async function listRecordsForWorkspace(serviceClient: EdgeClient, filters
   }
 
   const recordIds = records.map((record) => record.id);
-  const [customValuesResult, taskLinksResult, activitiesResult] = await Promise.all([
+  const [fieldKeyByDefinitionId, customValuesResult, taskLinksResult, activitiesResult] = await Promise.all([
+    getFieldKeyByDefinitionId(serviceClient, filters.workspace_id),
     serviceClient
       .from('custom_field_values')
       .select(
-        `entity_id, value_text, value_number, value_boolean, value_date, value_datetime, value_json, ${customFieldDefinitionRelation}!inner(field_key)`,
+        'entity_id, field_definition_id, value_text, value_number, value_boolean, value_date, value_datetime, value_json',
       )
       .eq('workspace_id', filters.workspace_id)
       .eq('entity_type', 'record')
@@ -737,17 +816,19 @@ export async function listRecordsForWorkspace(serviceClient: EdgeClient, filters
 
   const customByRecord = new Map<string, Record<string, unknown>>();
 
-  for (const row of customValuesResult.data ?? []) {
-    const definition = Array.isArray(row.custom_field_definitions)
-      ? row.custom_field_definitions[0]
-      : row.custom_field_definitions;
+  for (const row of (customValuesResult.data ?? []) as CustomFieldValueRawRow[]) {
+    if (!row.entity_id) {
+      continue;
+    }
 
-    if (!definition?.field_key) {
+    const fieldKey = fieldKeyByDefinitionId.get(row.field_definition_id);
+
+    if (!fieldKey) {
       continue;
     }
 
     const current = customByRecord.get(row.entity_id) ?? {};
-    current[definition.field_key] = serializeCustomValue({
+    current[fieldKey] = serializeCustomValue({
       value_text: row.value_text,
       value_number: row.value_number,
       value_boolean: row.value_boolean,
@@ -988,31 +1069,45 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
   const stage = await getStageSnapshot(serviceClient, workspaceId, stageId);
   const status = synchronizeRecordStatus(requestedStatus, stage?.is_closed ?? false);
 
-  const { data: record, error } = await serviceClient
-    .from('records')
-    .insert({
-      workspace_id: workspaceId,
-      record_type: 'lead',
-      title,
-      full_name: normalizeNullableString(core.full_name),
-      company_name: normalizeNullableString(core.company_name),
-      email: normalizeNullableString(core.email),
-      phone: normalizeNullableString(core.phone),
-      source_id: sourceId,
-      pipeline_id: pipelineId,
-      stage_id: stageId,
-      assignee_user_id: assigneeUserId,
-      status,
-      priority,
-      external_source: externalSource,
-      external_key: externalKey,
-      created_by: userId,
-      updated_by: userId,
-    })
-    .select(
-      'id, workspace_id, record_type, title, full_name, company_name, email, phone, source_id, pipeline_id, stage_id, assignee_user_id, status, priority, imported_from, created_by, updated_by, archived_at, created_at, updated_at',
-    )
-    .single();
+  const recordSelect =
+    'id, workspace_id, record_type, title, full_name, company_name, email, phone, source_id, pipeline_id, stage_id, assignee_user_id, status, priority, imported_from, created_by, updated_by, archived_at, created_at, updated_at';
+
+  const attemptInsert = async (statusValue: string | null) =>
+    await serviceClient
+      .from('records')
+      .insert({
+        workspace_id: workspaceId,
+        record_type: 'lead',
+        title,
+        full_name: normalizeNullableString(core.full_name),
+        company_name: normalizeNullableString(core.company_name),
+        email: normalizeNullableString(core.email),
+        phone: normalizeNullableString(core.phone),
+        source_id: sourceId,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        assignee_user_id: assigneeUserId,
+        status: statusValue,
+        priority,
+        external_source: externalSource,
+        external_key: externalKey,
+        created_by: userId,
+        updated_by: userId,
+      })
+      .select(recordSelect)
+      .single();
+
+  let { data: record, error } = await attemptInsert(status);
+
+  if (error && isRecordsStatusConstraintViolation(error)) {
+    const legacyStatus = toLegacyRecordStatus(status);
+
+    if (legacyStatus !== status) {
+      const retryResult = await attemptInsert(legacyStatus);
+      record = retryResult.data;
+      error = retryResult.error;
+    }
+  }
 
   if (error) {
     if (externalSource && externalKey && isUniqueViolation(error)) {
@@ -1145,32 +1240,44 @@ export async function updateRecordForWorkspace(
     throw new Error('Title is required.');
   }
 
-  const { error } = await serviceClient
-    .from('records')
-    .update({
-      title: nextTitle,
-      full_name: core.full_name === undefined ? existing.record.full_name : normalizeNullableString(core.full_name),
-      company_name:
-        core.company_name === undefined ? existing.record.company_name : normalizeNullableString(core.company_name),
-      email: core.email === undefined ? existing.record.email : normalizeNullableString(core.email),
-      phone: core.phone === undefined ? existing.record.phone : normalizeNullableString(core.phone),
-      source_id: sourceId,
-      pipeline_id: pipelineId,
-      stage_id: stageId,
-      assignee_user_id: assigneeUserId,
-      status: nextStatus,
-      priority: requestedPriority,
-      updated_by: userId,
-    })
-    .eq('workspace_id', workspaceId)
-    .eq('id', recordId);
+  const attemptUpdate = async (statusValue: string | null) =>
+    await serviceClient
+      .from('records')
+      .update({
+        title: nextTitle,
+        full_name: core.full_name === undefined ? existing.record.full_name : normalizeNullableString(core.full_name),
+        company_name:
+          core.company_name === undefined ? existing.record.company_name : normalizeNullableString(core.company_name),
+        email: core.email === undefined ? existing.record.email : normalizeNullableString(core.email),
+        phone: core.phone === undefined ? existing.record.phone : normalizeNullableString(core.phone),
+        source_id: sourceId,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        assignee_user_id: assigneeUserId,
+        status: statusValue,
+        priority: requestedPriority,
+        updated_by: userId,
+      })
+      .eq('workspace_id', workspaceId)
+      .eq('id', recordId);
+
+  let { error } = await attemptUpdate(nextStatus);
+
+  if (error && isRecordsStatusConstraintViolation(error)) {
+    const legacyStatus = toLegacyRecordStatus(nextStatus);
+
+    if (legacyStatus !== nextStatus) {
+      const retryResult = await attemptUpdate(legacyStatus);
+      error = retryResult.error;
+    }
+  }
 
   if (error) {
     throw new Error(error.message);
   }
 
   const definitions = await getFieldDefinitions(serviceClient, workspaceId);
-  const existingValues = await getExistingCustomValues(serviceClient, recordId);
+  const existingValues = await getExistingCustomValues(serviceClient, workspaceId, recordId);
   await upsertCustomFieldValues(serviceClient, workspaceId, recordId, definitions, custom, existingValues);
 
   if (existing.record.stage_id !== stageId) {

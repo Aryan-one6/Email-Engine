@@ -126,7 +126,7 @@ function parseExternalRecipientsInput(value: string) {
 
 function nextBlock(type: EmailLayoutBlockType): EmailLayoutBlock {
   if (type === 'header') {
-    return { id: crypto.randomUUID(), type, title: 'Your Brand', subtitle: 'Powered by CoreFlow', align: 'left' };
+    return { id: crypto.randomUUID(), type, title: 'Your Brand', subtitle: 'Powered by Email Intelligence', align: 'left' };
   }
 
   if (type === 'hero') {

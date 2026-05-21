@@ -62,7 +62,7 @@ export const SUPPORTED_TEMPLATE_TOKENS = [
 ] as const;
 
 const DEFAULT_THEME: Required<EmailBrandTheme> = {
-  brandName: 'CoreFlow',
+  brandName: 'Email Intelligence',
   primaryColor: '#1f4a8a',
   secondaryColor: '#0f172a',
   accentColor: '#2563eb',
@@ -72,10 +72,10 @@ const DEFAULT_THEME: Required<EmailBrandTheme> = {
   headingFont: 'Georgia, serif',
   bodyFont: 'Arial, sans-serif',
   logoUrl: '',
-  footerCompanyName: 'CoreFlow',
+  footerCompanyName: 'Email Intelligence',
   footerAddress: '',
   footerContactEmail: '',
-  footerSignature: 'Powered by CoreFlow',
+  footerSignature: 'Powered by Email Intelligence',
 };
 
 function asString(value: unknown) {
@@ -611,7 +611,7 @@ export function buildRecipientTokens(params: {
     lead_first_name: leadFirstName,
     lead_email: leadEmail,
     workspace_name: asString(params.workspaceName) || 'Your Workspace',
-    sender_name: asString(params.senderName) || 'CoreFlow Team',
+    sender_name: asString(params.senderName) || 'Email Intelligence Team',
     sender_email: asString(params.senderEmail),
   };
 }

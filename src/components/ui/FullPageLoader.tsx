@@ -1,5 +1,6 @@
+import lottie, { type AnimationItem } from 'lottie-web';
 import { LoaderCircle } from 'lucide-react';
-import { LogoMark } from './LogoMark';
+import { useEffect, useRef, useState } from 'react';
 
 type LoaderVariant = 'app' | 'auth';
 
@@ -8,18 +9,76 @@ interface FullPageLoaderProps {
   variant?: LoaderVariant;
 }
 
-export function FullPageLoader({ label = 'Loading CoreFlow...', variant = 'app' }: FullPageLoaderProps) {
+function LottieLoader({ className }: { className?: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let animation: AnimationItem | null = null;
+    let cancelled = false;
+    const controller = new AbortController();
+
+    void fetch('/Email_Loader.json', { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Unable to load loader animation.');
+        }
+
+        return (await response.json()) as Record<string, unknown>;
+      })
+      .then((data) => {
+        if (cancelled || !containerRef.current) {
+          return;
+        }
+
+        animation = lottie.loadAnimation({
+          container: containerRef.current,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          animationData: data,
+          rendererSettings: {
+            preserveAspectRatio: 'xMidYMid meet',
+          },
+        });
+
+        setHasError(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHasError(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      animation?.destroy();
+    };
+  }, []);
+
+  if (hasError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-transparent text-sky-500">
+        <LoaderCircle className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className={className} />;
+}
+
+export function FullPageLoader({ label = 'Loading Email Intelligence...', variant = 'app' }: FullPageLoaderProps) {
   if (variant === 'auth') {
     return (
-      <div className="relative flex min-h-screen items-center justify-center bg-[#EEF0F7] px-4">
-        <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-2xl border border-slate-200 bg-white px-8 py-10 text-center shadow-card">
-          <LogoMark />
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600">
-            <LoaderCircle className="h-6 w-6 animate-spin" />
+      <div className="relative flex min-h-screen items-center justify-center bg-transparent px-4">
+        <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+          <div className="h-48 w-48 sm:h-42 sm:w-42">
+            <LottieLoader className="h-full w-full" />
           </div>
           <div className="space-y-1.5">
-            <h1 className="font-display text-xl font-semibold text-slate-900">Preparing your workspace</h1>
-            <p className="text-sm text-slate-500">{label}</p>
+            <h1 className="font-display text-xl font-semibold text-slate-900/95">Preparing your workspace</h1>
+            <p className="text-sm text-slate-600">{label}</p>
           </div>
         </div>
       </div>
@@ -27,27 +86,14 @@ export function FullPageLoader({ label = 'Loading CoreFlow...', variant = 'app' 
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-100 px-4">
-      <div className="pointer-events-none absolute -left-20 top-16 h-64 w-64 rounded-full bg-indigo-100/60 blur-3xl" />
-      <div className="pointer-events-none absolute -right-20 bottom-10 h-64 w-64 rounded-full bg-cyan-100/60 blur-3xl" />
-
-      <div className="relative w-full max-w-sm rounded-2xl border border-slate-200/90 bg-white/95 px-5 py-4 shadow-md backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">CoreFlow</p>
-            <p className="truncate text-sm text-slate-700">{label}</p>
-          </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">Syncing</span>
-          </div>
+    <div className="relative flex min-h-screen items-center justify-center bg-transparent px-4">
+      <div className="flex flex-col items-center">
+        <div className="h-32 w-32 sm:h-36 sm:w-36">
+          <LottieLoader className="h-full w-full" />
         </div>
-
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-400" />
+        <div className="mt-1 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Intelligence</p>
+          <p className="text-sm font-medium text-slate-700">{label}</p>
         </div>
       </div>
     </div>

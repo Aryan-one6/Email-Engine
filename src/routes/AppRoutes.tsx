@@ -15,6 +15,9 @@ const CompleteOnboardingPage = lazy(async () =>
   import('../pages/CompleteOnboardingPage').then((module) => ({ default: module.CompleteOnboardingPage })),
 );
 const AccountPage = lazy(async () => import('../pages/AccountPage').then((module) => ({ default: module.AccountPage })));
+const DashboardPage = lazy(async () =>
+  import('../pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
+);
 const EmailPage = lazy(async () => import('../pages/EmailPage').then((module) => ({ default: module.EmailPage })));
 const EmailTemplatesPage = lazy(async () =>
   import('../pages/EmailTemplatesPage').then((module) => ({ default: module.EmailTemplatesPage })),
@@ -52,10 +55,10 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<Navigate to="/email" replace />} />
-        <Route path="/dashboard/:crmType" element={<Navigate to="/email" replace />} />
+        <Route path="/dashboard/:crmType" element={<Navigate to="/dashboard" replace />} />
 
         <Route element={<CrmWorkspaceRoute />}>
+          <Route path="/dashboard" element={withPageLoader(<DashboardPage />)} />
           <Route path="/account" element={withPageLoader(<AccountPage />)} />
           <Route path="/team" element={withPageLoader(<TeamPage />)} />
           <Route path="/email" element={withPageLoader(<EmailPage />)} />

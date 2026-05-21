@@ -63,7 +63,7 @@ export function InviteAcceptPage() {
         throw new Error('Your password was saved, but the workspace invite could not be attached. Ask the workspace owner to resend the invite.');
       }
 
-      toast.success('Password created. Welcome to CoreFlow.');
+      toast.success('Password created. Welcome to Email Intelligence.');
       navigate(getDashboardPath(nextWorkspace), { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to finish the invite.';
@@ -76,7 +76,7 @@ export function InviteAcceptPage() {
   return (
     <AuthLayout
       eyebrow="Accept invite"
-      title="Create your password to join CoreFlow."
+      title="Create your password to join Email Intelligence."
       description="This secure step confirms the invite and finishes access to the workspace."
       leftPanel={<SigninValuePanel />}
       footer={(
