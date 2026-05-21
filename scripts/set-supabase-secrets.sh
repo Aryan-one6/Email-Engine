@@ -56,6 +56,10 @@ else
   FRONTEND_URL_VALUE="http://localhost:5173"
 fi
 
+if [[ -z "$EMAIL_OAUTH_CALLBACK_URL" && "$MODE" == "prod" ]]; then
+  EMAIL_OAUTH_CALLBACK_URL="${APP_URL_VALUE%/}/api/oauth/email-callback"
+fi
+
 TMP_ENV="$(mktemp)"
 trap 'rm -f "$TMP_ENV"' EXIT
 

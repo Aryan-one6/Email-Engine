@@ -5,6 +5,7 @@ This project already supports both OAuth providers in:
 - `supabase/functions/email-oauth-start`
 - `supabase/functions/email-oauth-callback`
 - `supabase/functions/_shared/email-sender-adapters.ts`
+- `api/oauth/email-callback.js` (app-domain callback proxy)
 
 If you see:
 
@@ -32,7 +33,7 @@ Use that output for `EMAIL_CREDENTIALS_ENCRYPTION_KEY`.
 ## 2. Google Workspace OAuth app
 
 1. Open Google Cloud Console.
-2. Create/select a project.
+2. Create/select a project.St
 3. Enable API:
    - `Gmail API`
 4. Configure OAuth consent screen.
@@ -41,8 +42,9 @@ Use that output for `EMAIL_CREDENTIALS_ENCRYPTION_KEY`.
    - `https://email.triadflair.com`
    - `http://localhost:5173`
 7. Add Authorized redirect URIs:
-   - `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`
-   - Optional local callback (if you run Supabase locally): `http://127.0.0.1:54321/functions/v1/email-oauth-callback`
+   - `https://email.triadflair.com/api/oauth/email-callback`
+   - Optional direct Supabase callback: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`
+   - Optional local Supabase callback (if you run Supabase locally): `http://127.0.0.1:54321/functions/v1/email-oauth-callback`
 8. Note `Client ID` and `Client Secret`.
 9. Ensure scopes requested by this app are allowed:
    - `openid`
@@ -59,7 +61,8 @@ Notes:
 1. Open Microsoft Entra admin center (Azure portal).
 2. Go to `App registrations` -> `New registration`.
 3. Add Redirect URI (Web):
-   - `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`
+   - `https://email.triadflair.com/api/oauth/email-callback`
+   - Optional direct Supabase callback: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`
 4. Create a client secret and copy it.
 5. In `API permissions`, add delegated permissions:
    - `openid`
@@ -78,6 +81,7 @@ Replace placeholders and run:
 supabase secrets set \
   APP_URL="https://email.triadflair.com" \
   FRONTEND_URL="https://email.triadflair.com" \
+  EMAIL_OAUTH_CALLBACK_URL="https://email.triadflair.com/api/oauth/email-callback" \
   GOOGLE_OAUTH_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID" \
   GOOGLE_OAUTH_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET" \
   MICROSOFT_OAUTH_CLIENT_ID="YOUR_MS_CLIENT_ID" \
@@ -88,7 +92,7 @@ supabase secrets set \
 
 For local testing only, set both values to `http://localhost:5173`.
 
-If you need custom callback URL, also set:
+If you need to bypass the app-domain proxy, you can switch callback URL to Supabase directly:
 
 ```bash
 supabase secrets set \
@@ -116,6 +120,6 @@ supabase functions deploy account-settings-get --project-ref YOUR_PROJECT_REF
 - `Edge Function returned a non-2xx status code`:
   - Check secrets are set in the same Supabase project your frontend points to.
 - Redirect mismatch from provider:
-  - Verify redirect URI is exactly `https://YOUR_PROJECT_REF.supabase.co/functions/v1/email-oauth-callback`.
+  - Verify redirect URI is exactly `https://email.triadflair.com/api/oauth/email-callback` (or your configured override).
 - Token refresh failures later:
   - Reconnect sender (refresh token may be missing/revoked).

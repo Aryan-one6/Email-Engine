@@ -1,4 +1,5 @@
 import type { EdgeClient } from './server.ts';
+import { isLegacyRecordFieldKey } from './legacy-record-fields.ts';
 
 export type MappingStatus = 'auto_mapped' | 'needs_confirmation' | 'new_semantic' | 'ignored' | 'confirmed';
 export type MappingSource = 'profile' | 'exact' | 'alias' | 'heuristic' | 'manual' | 'none';
@@ -56,7 +57,7 @@ export interface ImportProfileMatch {
   }>;
 }
 
-const CORE_KEYS = new Set(['title', 'full_name', 'company_name', 'email', 'phone', 'status']);
+const CORE_KEYS = new Set(['title', 'full_name', 'company_name', 'email', 'phone', 'status', 'priority']);
 const REQUIRED_LEAD_TARGETS = new Set(['core:full_name', 'core:email']);
 
 const DEFAULT_SEMANTIC_ALIASES: Record<string, string[]> = {
@@ -66,6 +67,7 @@ const DEFAULT_SEMANTIC_ALIASES: Record<string, string[]> = {
   email: ['email', 'email_address', 'mail', 'contact_email'],
   phone: ['phone', 'mobile', 'mobile_number', 'phone_number', 'contact_number', 'whatsapp_number'],
   status: ['status', 'lead_status', 'stage_status'],
+  priority: ['priority', 'urgency', 'urgency_level', 'lead_priority', 'importance'],
 };
 
 function normalizeString(value: unknown) {
@@ -257,7 +259,7 @@ export async function loadFieldContext(serviceClient: EdgeClient, workspaceId: s
       is_required: Boolean(row.is_required),
       options,
     };
-  });
+  }).filter((field) => !isLegacyRecordFieldKey(field.field_key));
 
   const aliases = (aliasesResult.data ?? [])
     .filter((row) => !row.workspace_id || row.workspace_id === workspaceId)
@@ -380,7 +382,14 @@ export async function analyzeImportColumns(params: {
 
     const profileMatch = normalizedProfileByColumn.get(normalizedColumn);
 
-    if (profileMatch) {
+    const profileTargetIsValid = profileMatch
+      ? (
+        (profileMatch.target_type === 'core' && CORE_KEYS.has(profileMatch.target_key))
+        || (profileMatch.target_type === 'custom' && customFieldByKey.has(profileMatch.target_key))
+      )
+      : false;
+
+    if (profileMatch && profileTargetIsValid) {
       const semantic = profileMatch.semantic_id ? semanticById.get(profileMatch.semantic_id) : null;
 
       return {
@@ -618,7 +627,9 @@ export async function loadTransformContext(serviceClient: EdgeClient, workspaceI
     });
 
   const customFieldByKey = new Map(
-    (customFieldsResult.data ?? []).map((row) => [
+    (customFieldsResult.data ?? [])
+      .filter((row) => !isLegacyRecordFieldKey(row.field_key))
+      .map((row) => [
       row.field_key,
       {
         field_type: row.field_type,

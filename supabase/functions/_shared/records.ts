@@ -1,6 +1,7 @@
 import type { EdgeClient } from './server.ts';
 import { getString, listWorkspaceAssignees } from './server.ts';
 import { enrollRecordEmailFollowupIfEligible } from './email-automation.ts';
+import { isLegacyRecordFieldKey } from './legacy-record-fields.ts';
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
@@ -216,7 +217,8 @@ async function getFieldDefinitions(serviceClient: EdgeClient, workspaceId: strin
     throw new Error(error.message);
   }
 
-  return (data ?? []) as CustomFieldDefinitionRow[];
+  return ((data ?? []) as CustomFieldDefinitionRow[])
+    .filter((field) => !isLegacyRecordFieldKey(field.field_key));
 }
 
 async function getExistingCustomValues(serviceClient: EdgeClient, recordId: string) {
@@ -1022,7 +1024,11 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
       );
 
       if (existingRecordId) {
-        return getRecordDetails(serviceClient, workspaceId, existingRecordId);
+        const existing = await getRecordDetails(serviceClient, workspaceId, existingRecordId);
+        return {
+          ...existing,
+          _write_action: 'existing' as const,
+        };
       }
     }
 
@@ -1067,7 +1073,11 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
     }
   }
 
-  return getRecordDetails(serviceClient, workspaceId, record.id);
+  const created = await getRecordDetails(serviceClient, workspaceId, record.id);
+  return {
+    ...created,
+    _write_action: 'created' as const,
+  };
 }
 
 export async function updateRecordForWorkspace(

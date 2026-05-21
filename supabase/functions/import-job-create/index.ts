@@ -1,11 +1,14 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import { buildImportIdentityKey } from '../_shared/import-identity.ts';
 import {
   buildSourceFingerprint,
   getWorkspaceCrmType,
   loadTransformContext,
   transformMappedValue,
 } from '../_shared/import-intelligence.ts';
-import { createRecordForWorkspace } from '../_shared/records.ts';
+import { buildImportUpdatePlan, type ImportRecordSnapshot } from '../_shared/import-upsert.ts';
+import { isLegacyRecordFieldKey } from '../_shared/legacy-record-fields.ts';
+import { createRecordForWorkspace, updateRecordForWorkspace } from '../_shared/records.ts';
 import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
 
 const allowedEntityTypes = new Set(['record']);
@@ -17,9 +20,48 @@ const allowedCoreTargetKeys = new Set([
   'email',
   'phone',
   'status',
+  'priority',
 ]);
 const requiredLeadTargets = new Set(['core:full_name', 'core:email']);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ALLOWED_RECORD_STATUSES = new Set([
+  'new',
+  'email_sent',
+  'mobile_contacted',
+  'replied',
+  'interested',
+  'not_interested',
+]);
+const ALLOWED_RECORD_PRIORITIES = new Set(['low', 'medium', 'high']);
+const RECORD_STATUS_ALIASES: Record<string, string> = {
+  open: 'new',
+  qualified: 'new',
+  nurturing: 'email_sent',
+  closed: 'not_interested',
+  not_interested: 'not_interested',
+  notinterested: 'not_interested',
+  emailsent: 'email_sent',
+  emailed: 'email_sent',
+  email_sent: 'email_sent',
+  mobile_contacted: 'mobile_contacted',
+  mobilecontacted: 'mobile_contacted',
+  called: 'mobile_contacted',
+  replied: 'replied',
+  response: 'replied',
+  responded: 'replied',
+  interested: 'interested',
+  warm: 'interested',
+  new: 'new',
+};
+const RECORD_PRIORITY_ALIASES: Record<string, string> = {
+  urgent: 'high',
+  highest: 'high',
+  high: 'high',
+  medium: 'medium',
+  normal: 'medium',
+  standard: 'medium',
+  low: 'low',
+};
 
 interface ImportMappingPayload {
   source_column: string;
@@ -39,11 +81,40 @@ interface ImportRowPayload {
 }
 
 interface CustomFieldDefinitionRow {
+  id: string;
   field_key: string;
   label: string;
   field_type: string;
   is_required: boolean;
   options: unknown;
+}
+
+interface ExistingRecordRow {
+  id: string;
+  external_source: string | null;
+  external_key: string | null;
+  title: string | null;
+  full_name: string | null;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  source_id: string | null;
+  pipeline_id: string | null;
+  stage_id: string | null;
+  assignee_user_id: string | null;
+  status: string | null;
+  priority: string | null;
+}
+
+interface CustomFieldValueRow {
+  entity_id: string;
+  field_definition_id: string;
+  value_text: string | null;
+  value_number: number | string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_datetime: string | null;
+  value_json: unknown;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -70,6 +141,44 @@ function normalizeEmail(value: unknown) {
   }
 
   return EMAIL_REGEX.test(nextValue) ? nextValue : '';
+}
+
+function normalizeEnumToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function sanitizeImportStatus(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeEnumToken(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const mapped = RECORD_STATUS_ALIASES[normalized] ?? normalized;
+  return ALLOWED_RECORD_STATUSES.has(mapped) ? mapped : null;
+}
+
+function sanitizeImportPriority(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeEnumToken(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const mapped = RECORD_PRIORITY_ALIASES[normalized] ?? normalized;
+  return ALLOWED_RECORD_PRIORITIES.has(mapped) ? mapped : null;
 }
 
 function coerceCustomValue(value: unknown, definition: CustomFieldDefinitionRow) {
@@ -127,6 +236,48 @@ function coerceCustomValue(value: unknown, definition: CustomFieldDefinitionRow)
     default:
       return normalized;
   }
+}
+
+function serializeCustomFieldValue(row: CustomFieldValueRow) {
+  if (row.value_json !== null && row.value_json !== undefined) return row.value_json;
+  if (row.value_boolean !== null) return row.value_boolean;
+  if (row.value_number !== null) return Number(row.value_number);
+  if (row.value_datetime !== null) return row.value_datetime;
+  if (row.value_date !== null) return row.value_date;
+  return row.value_text;
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+function getExternalLookupKey(source: string, key: string) {
+  return `${source}::${key}`;
+}
+
+function toRecordSnapshot(record: ExistingRecordRow, custom: Record<string, unknown>): ImportRecordSnapshot {
+  return {
+    core: {
+      title: record.title,
+      full_name: record.full_name,
+      company_name: record.company_name,
+      email: record.email,
+      phone: record.phone,
+      source_id: record.source_id,
+      pipeline_id: record.pipeline_id,
+      stage_id: record.stage_id,
+      assignee_user_id: record.assignee_user_id,
+      status: record.status,
+      priority: record.priority,
+    },
+    custom,
+  };
 }
 
 function buildImportPayload(
@@ -228,6 +379,15 @@ Deno.serve(async (request) => {
     const sourceFingerprint = typeof payload.source_fingerprint === 'string' && payload.source_fingerprint.trim()
       ? payload.source_fingerprint.trim()
       : '';
+    const importSourceName = typeof payload.import_source_name === 'string' && payload.import_source_name.trim()
+      ? payload.import_source_name.trim()
+      : fileName;
+    const allowEmptyOverwrite = payload.allow_empty_overwrite === true;
+    const identitySourceIdColumns = Array.isArray(payload.identity_source_id_columns)
+      ? payload.identity_source_id_columns
+        .map((column) => getTrimmedString(column))
+        .filter(Boolean)
+      : [];
     const profileId = typeof payload.profile_id === 'string' ? payload.profile_id.trim() : null;
     const inputRows = Array.isArray(payload.rows)
       ? payload.rows
@@ -294,6 +454,11 @@ Deno.serve(async (request) => {
     }
 
     const effectiveMappings = mappingRows.filter((mapping) => mapping.status !== 'ignored');
+    const mappedCoreTargetKeys = new Set(
+      effectiveMappings
+        .filter((mapping) => mapping.target_type === 'core')
+        .map((mapping) => mapping.target_key),
+    );
 
     if (effectiveMappings.length === 0) {
       return jsonResponse({ error: 'All mappings are ignored. Map at least one CSV column before importing.' }, 400);
@@ -336,7 +501,7 @@ Deno.serve(async (request) => {
 
     const { data: customFieldDefinitions, error: customFieldError } = await authContext.serviceClient
       .from('custom_field_definitions')
-      .select('field_key, label, field_type, is_required, options')
+      .select('id, field_key, label, field_type, is_required, options')
       .eq('workspace_id', workspaceId)
       .eq('entity_type', 'record')
       .eq('is_active', true);
@@ -346,7 +511,9 @@ Deno.serve(async (request) => {
     }
 
     const customFieldByKey = new Map(
-      ((customFieldDefinitions ?? []) as CustomFieldDefinitionRow[]).map((field) => [field.field_key, field]),
+      ((customFieldDefinitions ?? []) as CustomFieldDefinitionRow[])
+        .filter((field) => !isLegacyRecordFieldKey(field.field_key))
+        .map((field) => [field.field_key, field]),
     );
 
     for (const mapping of effectiveMappings) {
@@ -431,11 +598,20 @@ Deno.serve(async (request) => {
       .eq('id', job.id);
 
     const transformContext = await loadTransformContext(authContext.serviceClient, workspaceId, crmType);
-    let successRows = 0;
+    let createdRows = 0;
+    let updatedRows = 0;
+    let skippedRows = 0;
     let failedRows = 0;
     const rowFailures: Array<{ rowIndex: number; error: string }> = [];
+    const sortedRows = (persistedImportRows as ImportRowPayload[]).sort((left, right) => left.row_index - right.row_index);
+    const preparedRows: Array<{
+      row: ImportRowPayload;
+      importPayload: ReturnType<typeof buildImportPayload>;
+      coreForUpdate: Record<string, unknown>;
+      identity: Awaited<ReturnType<typeof buildImportIdentityKey>>;
+    }> = [];
 
-    for (const row of (persistedImportRows as ImportRowPayload[]).sort((left, right) => left.row_index - right.row_index)) {
+    for (const row of sortedRows) {
       try {
         const importPayload = buildImportPayload(row.raw_data, effectiveMappings, customFieldByKey, transformContext, row.row_index);
         const leadName = getTrimmedString(importPayload.core.full_name) || getTrimmedString(importPayload.core.title);
@@ -445,46 +621,43 @@ Deno.serve(async (request) => {
           throw new Error('Lead name is required for each row.');
         }
 
+        importPayload.core.full_name = leadName;
+        importPayload.core.title = getTrimmedString(importPayload.core.title) || leadName;
+        importPayload.core.status = sanitizeImportStatus(importPayload.core.status);
+        importPayload.core.priority = sanitizeImportPriority(importPayload.core.priority);
+        const coreForUpdate: Record<string, unknown> = { ...importPayload.core };
+
+        if (!mappedCoreTargetKeys.has('title')) {
+          delete coreForUpdate.title;
+        }
+
+        const identity = await buildImportIdentityKey(
+          row.raw_data,
+          {
+            mappings: effectiveMappings,
+            source_id_columns: identitySourceIdColumns,
+            core_overrides: {
+              email: importPayload.core.email,
+              phone: importPayload.core.phone,
+              company_name: importPayload.core.company_name,
+            },
+          },
+          importSourceName,
+        );
+
         if (!leadEmail) {
           throw new Error('Lead email is required and must be valid for each row.');
         }
 
-        importPayload.core.full_name = leadName;
         importPayload.core.email = leadEmail;
-        importPayload.core.title = getTrimmedString(importPayload.core.title) || leadName;
+        coreForUpdate.email = leadEmail;
 
-        const created = await createRecordForWorkspace(authContext.serviceClient, authContext.user.id, {
-          workspace_id: workspaceId,
-          core: importPayload.core,
-          custom: importPayload.custom,
+        preparedRows.push({
+          row,
+          importPayload,
+          coreForUpdate,
+          identity,
         });
-
-        await authContext.serviceClient
-          .from('records')
-          .update({
-            imported_from: job.id,
-            updated_by: authContext.user.id,
-          })
-          .eq('workspace_id', workspaceId)
-          .eq('id', created.record.id);
-
-        const { error: rowUpdateError } = await authContext.serviceClient
-          .from('import_rows')
-          .update({
-            status: 'processed',
-            error_message: null,
-            transformed_data: importPayload.transformed,
-            validation_errors: null,
-            lineage: importPayload.lineage,
-            created_record_id: created.record.id,
-          })
-          .eq('id', row.id);
-
-        if (rowUpdateError) {
-          throw new Error(rowUpdateError.message);
-        }
-
-        successRows += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to import row.';
 
@@ -508,7 +681,475 @@ Deno.serve(async (request) => {
       }
     }
 
-    const finalStatus = successRows > 0 ? 'completed' : 'failed';
+    const existingByIdentity = new Map<
+      string,
+      {
+        record: ExistingRecordRow;
+        snapshot: ImportRecordSnapshot;
+      }
+    >();
+
+    if (preparedRows.length > 0) {
+      const uniqueLookupKeys = new Set<string>();
+      const uniqueExternalKeys: string[] = [];
+      const externalSource = preparedRows[0].identity.external_source;
+
+      for (const prepared of preparedRows) {
+        const lookupKey = getExternalLookupKey(prepared.identity.external_source, prepared.identity.external_key);
+
+        if (uniqueLookupKeys.has(lookupKey)) {
+          continue;
+        }
+
+        uniqueLookupKeys.add(lookupKey);
+        uniqueExternalKeys.push(prepared.identity.external_key);
+      }
+
+      const existingRows: ExistingRecordRow[] = [];
+
+      for (const keyChunk of chunkArray(uniqueExternalKeys, 500)) {
+        if (keyChunk.length === 0) {
+          continue;
+        }
+
+        const { data, error } = await authContext.serviceClient
+          .from('records')
+          .select(
+            'id, external_source, external_key, title, full_name, company_name, email, phone, source_id, pipeline_id, stage_id, assignee_user_id, status, priority',
+          )
+          .eq('workspace_id', workspaceId)
+          .eq('external_source', externalSource)
+          .in('external_key', keyChunk);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        existingRows.push(...((data ?? []) as ExistingRecordRow[]));
+      }
+
+      const recordIds = [...new Set(existingRows.map((record) => record.id))];
+      const customByRecordId = new Map<string, Record<string, unknown>>();
+      const definitionKeyById = new Map(
+        ((customFieldDefinitions ?? []) as CustomFieldDefinitionRow[]).map((definition) => [definition.id, definition.field_key]),
+      );
+
+      if (recordIds.length > 0) {
+        for (const idChunk of chunkArray(recordIds, 500)) {
+          const { data, error } = await authContext.serviceClient
+            .from('custom_field_values')
+            .select('entity_id, field_definition_id, value_text, value_number, value_boolean, value_date, value_datetime, value_json')
+            .eq('workspace_id', workspaceId)
+            .eq('entity_type', 'record')
+            .in('entity_id', idChunk);
+
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          for (const row of (data ?? []) as CustomFieldValueRow[]) {
+            const fieldKey = definitionKeyById.get(row.field_definition_id);
+
+            if (!fieldKey) {
+              continue;
+            }
+
+            const current = customByRecordId.get(row.entity_id) ?? {};
+            current[fieldKey] = serializeCustomFieldValue(row);
+            customByRecordId.set(row.entity_id, current);
+          }
+        }
+      }
+
+      for (const record of existingRows) {
+        if (!record.external_source || !record.external_key) {
+          continue;
+        }
+
+        const lookupKey = getExternalLookupKey(record.external_source, record.external_key);
+        const custom = customByRecordId.get(record.id) ?? {};
+
+        existingByIdentity.set(lookupKey, {
+          record,
+          snapshot: toRecordSnapshot(record, custom),
+        });
+      }
+    }
+
+    for (const prepared of preparedRows) {
+      const row = prepared.row;
+      try {
+        const lookupKey = getExternalLookupKey(prepared.identity.external_source, prepared.identity.external_key);
+        const existingMatch = existingByIdentity.get(lookupKey);
+
+        if (existingMatch) {
+          const updatePlan = buildImportUpdatePlan(
+            existingMatch.snapshot,
+            prepared.coreForUpdate,
+            prepared.importPayload.custom,
+            {
+              skip_empty_core_overwrite: !allowEmptyOverwrite,
+              skip_empty_custom_overwrite: !allowEmptyOverwrite,
+            },
+          );
+
+          if (!updatePlan.has_changes) {
+            const { error: rowUpdateError } = await authContext.serviceClient
+              .from('import_rows')
+              .update({
+                status: 'processed',
+                error_message: null,
+                transformed_data: prepared.importPayload.transformed,
+                validation_errors: null,
+                lineage: prepared.importPayload.lineage,
+                created_record_id: existingMatch.record.id,
+              })
+              .eq('id', row.id);
+
+            if (rowUpdateError) {
+              throw new Error(rowUpdateError.message);
+            }
+
+            skippedRows += 1;
+            continue;
+          }
+
+          const updated = await updateRecordForWorkspace(
+            authContext.serviceClient,
+            authContext.user.id,
+            existingMatch.record.id,
+            {
+              workspace_id: workspaceId,
+              core: updatePlan.core,
+              custom: updatePlan.custom,
+            },
+          );
+
+          const { error: updateImportedFromError } = await authContext.serviceClient
+            .from('records')
+            .update({
+              imported_from: job.id,
+              updated_by: authContext.user.id,
+            })
+            .eq('workspace_id', workspaceId)
+            .eq('id', updated.record.id);
+
+          if (updateImportedFromError) {
+            throw new Error(updateImportedFromError.message);
+          }
+
+          const { error: rowUpdateError } = await authContext.serviceClient
+            .from('import_rows')
+            .update({
+              status: 'processed',
+              error_message: null,
+              transformed_data: prepared.importPayload.transformed,
+              validation_errors: null,
+              lineage: prepared.importPayload.lineage,
+              created_record_id: updated.record.id,
+            })
+            .eq('id', row.id);
+
+          if (rowUpdateError) {
+            throw new Error(rowUpdateError.message);
+          }
+
+          updatedRows += 1;
+          existingByIdentity.set(lookupKey, {
+            record: {
+              ...existingMatch.record,
+              title: updated.record.title,
+              full_name: updated.record.full_name,
+              company_name: updated.record.company_name,
+              email: updated.record.email,
+              phone: updated.record.phone,
+              source_id: updated.record.source_id,
+              pipeline_id: updated.record.pipeline_id,
+              stage_id: updated.record.stage_id,
+              assignee_user_id: updated.record.assignee_user_id,
+              status: updated.record.status,
+              priority: updated.record.priority,
+            },
+            snapshot: {
+              core: {
+                title: updated.record.title,
+                full_name: updated.record.full_name,
+                company_name: updated.record.company_name,
+                email: updated.record.email,
+                phone: updated.record.phone,
+                source_id: updated.record.source_id,
+                pipeline_id: updated.record.pipeline_id,
+                stage_id: updated.record.stage_id,
+                assignee_user_id: updated.record.assignee_user_id,
+                status: updated.record.status,
+                priority: updated.record.priority,
+              },
+              custom: updated.custom ?? {},
+            },
+          });
+          continue;
+        }
+
+        const created = await createRecordForWorkspace(authContext.serviceClient, authContext.user.id, {
+          workspace_id: workspaceId,
+          core: prepared.importPayload.core,
+          custom: prepared.importPayload.custom,
+          external_source: prepared.identity.external_source,
+          external_key: prepared.identity.external_key,
+        });
+
+        const wasExistingOnConflict = (created as Record<string, unknown>)._write_action === 'existing';
+
+        if (wasExistingOnConflict) {
+          const conflictSnapshot: ImportRecordSnapshot = {
+            core: {
+              title: created.record.title,
+              full_name: created.record.full_name,
+              company_name: created.record.company_name,
+              email: created.record.email,
+              phone: created.record.phone,
+              source_id: created.record.source_id,
+              pipeline_id: created.record.pipeline_id,
+              stage_id: created.record.stage_id,
+              assignee_user_id: created.record.assignee_user_id,
+              status: created.record.status,
+              priority: created.record.priority,
+            },
+            custom: created.custom ?? {},
+          };
+
+          const updatePlan = buildImportUpdatePlan(
+            conflictSnapshot,
+            prepared.coreForUpdate,
+            prepared.importPayload.custom,
+            {
+              skip_empty_core_overwrite: !allowEmptyOverwrite,
+              skip_empty_custom_overwrite: !allowEmptyOverwrite,
+            },
+          );
+
+          if (updatePlan.has_changes) {
+            const conflictUpdated = await updateRecordForWorkspace(
+              authContext.serviceClient,
+              authContext.user.id,
+              created.record.id,
+              {
+                workspace_id: workspaceId,
+                core: updatePlan.core,
+                custom: updatePlan.custom,
+              },
+            );
+
+            const { error: updateImportedFromError } = await authContext.serviceClient
+              .from('records')
+              .update({
+                imported_from: job.id,
+                updated_by: authContext.user.id,
+              })
+              .eq('workspace_id', workspaceId)
+              .eq('id', conflictUpdated.record.id);
+
+            if (updateImportedFromError) {
+              throw new Error(updateImportedFromError.message);
+            }
+
+            const { error: rowUpdateError } = await authContext.serviceClient
+              .from('import_rows')
+              .update({
+                status: 'processed',
+                error_message: null,
+                transformed_data: prepared.importPayload.transformed,
+                validation_errors: null,
+                lineage: prepared.importPayload.lineage,
+                created_record_id: conflictUpdated.record.id,
+              })
+              .eq('id', row.id);
+
+            if (rowUpdateError) {
+              throw new Error(rowUpdateError.message);
+            }
+
+            updatedRows += 1;
+            existingByIdentity.set(lookupKey, {
+              record: {
+                id: conflictUpdated.record.id,
+                external_source: prepared.identity.external_source,
+                external_key: prepared.identity.external_key,
+                title: conflictUpdated.record.title,
+                full_name: conflictUpdated.record.full_name,
+                company_name: conflictUpdated.record.company_name,
+                email: conflictUpdated.record.email,
+                phone: conflictUpdated.record.phone,
+                source_id: conflictUpdated.record.source_id,
+                pipeline_id: conflictUpdated.record.pipeline_id,
+                stage_id: conflictUpdated.record.stage_id,
+                assignee_user_id: conflictUpdated.record.assignee_user_id,
+                status: conflictUpdated.record.status,
+                priority: conflictUpdated.record.priority,
+              },
+              snapshot: {
+                core: {
+                  title: conflictUpdated.record.title,
+                  full_name: conflictUpdated.record.full_name,
+                  company_name: conflictUpdated.record.company_name,
+                  email: conflictUpdated.record.email,
+                  phone: conflictUpdated.record.phone,
+                  source_id: conflictUpdated.record.source_id,
+                  pipeline_id: conflictUpdated.record.pipeline_id,
+                  stage_id: conflictUpdated.record.stage_id,
+                  assignee_user_id: conflictUpdated.record.assignee_user_id,
+                  status: conflictUpdated.record.status,
+                  priority: conflictUpdated.record.priority,
+                },
+                custom: conflictUpdated.custom ?? {},
+              },
+            });
+            continue;
+          }
+
+          const { error: rowUpdateError } = await authContext.serviceClient
+            .from('import_rows')
+            .update({
+              status: 'processed',
+              error_message: null,
+              transformed_data: prepared.importPayload.transformed,
+              validation_errors: null,
+              lineage: prepared.importPayload.lineage,
+              created_record_id: created.record.id,
+            })
+            .eq('id', row.id);
+
+          if (rowUpdateError) {
+            throw new Error(rowUpdateError.message);
+          }
+
+          skippedRows += 1;
+          existingByIdentity.set(lookupKey, {
+            record: {
+              id: created.record.id,
+              external_source: prepared.identity.external_source,
+              external_key: prepared.identity.external_key,
+              title: created.record.title,
+              full_name: created.record.full_name,
+              company_name: created.record.company_name,
+              email: created.record.email,
+              phone: created.record.phone,
+              source_id: created.record.source_id,
+              pipeline_id: created.record.pipeline_id,
+              stage_id: created.record.stage_id,
+              assignee_user_id: created.record.assignee_user_id,
+              status: created.record.status,
+              priority: created.record.priority,
+            },
+            snapshot: {
+              core: {
+                title: created.record.title,
+                full_name: created.record.full_name,
+                company_name: created.record.company_name,
+                email: created.record.email,
+                phone: created.record.phone,
+                source_id: created.record.source_id,
+                pipeline_id: created.record.pipeline_id,
+                stage_id: created.record.stage_id,
+                assignee_user_id: created.record.assignee_user_id,
+                status: created.record.status,
+                priority: created.record.priority,
+              },
+              custom: created.custom ?? {},
+            },
+          });
+          continue;
+        }
+
+        const { error: rowUpdateError } = await authContext.serviceClient
+          .from('import_rows')
+          .update({
+            status: 'processed',
+            error_message: null,
+            transformed_data: prepared.importPayload.transformed,
+            validation_errors: null,
+            lineage: prepared.importPayload.lineage,
+            created_record_id: created.record.id,
+          })
+          .eq('id', row.id);
+
+        if (rowUpdateError) {
+          throw new Error(rowUpdateError.message);
+        }
+
+        const { error: updateImportedFromError } = await authContext.serviceClient
+          .from('records')
+          .update({
+            imported_from: job.id,
+            updated_by: authContext.user.id,
+          })
+          .eq('workspace_id', workspaceId)
+          .eq('id', created.record.id);
+
+        if (updateImportedFromError) {
+          throw new Error(updateImportedFromError.message);
+        }
+
+        createdRows += 1;
+        existingByIdentity.set(lookupKey, {
+          record: {
+            id: created.record.id,
+            external_source: prepared.identity.external_source,
+            external_key: prepared.identity.external_key,
+            title: created.record.title,
+            full_name: created.record.full_name,
+            company_name: created.record.company_name,
+            email: created.record.email,
+            phone: created.record.phone,
+            source_id: created.record.source_id,
+            pipeline_id: created.record.pipeline_id,
+            stage_id: created.record.stage_id,
+            assignee_user_id: created.record.assignee_user_id,
+            status: created.record.status,
+            priority: created.record.priority,
+          },
+          snapshot: {
+            core: {
+              title: created.record.title,
+              full_name: created.record.full_name,
+              company_name: created.record.company_name,
+              email: created.record.email,
+              phone: created.record.phone,
+              source_id: created.record.source_id,
+              pipeline_id: created.record.pipeline_id,
+              stage_id: created.record.stage_id,
+              assignee_user_id: created.record.assignee_user_id,
+              status: created.record.status,
+              priority: created.record.priority,
+            },
+            custom: created.custom ?? {},
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to import row.';
+
+        await authContext.serviceClient
+          .from('import_rows')
+          .update({
+            status: 'failed',
+            error_message: message,
+            transformed_data: null,
+            validation_errors: [{ message }],
+            lineage: null,
+            created_record_id: null,
+          })
+          .eq('id', row.id);
+
+        failedRows += 1;
+        rowFailures.push({
+          rowIndex: row.row_index,
+          error: message,
+        });
+      }
+    }
+
+    const successRows = createdRows + updatedRows + skippedRows;
+    const finalStatus = failedRows < importRows.length ? 'completed' : 'failed';
     const { data: completedJob, error: jobUpdateError } = await authContext.serviceClient
       .from('import_jobs')
       .update({
@@ -518,6 +1159,9 @@ Deno.serve(async (request) => {
         failed_rows: failedRows,
         stats_json: {
           total_rows: importRows.length,
+          created_rows: createdRows,
+          updated_rows: updatedRows,
+          skipped_rows: skippedRows,
           success_rows: successRows,
           failed_rows: failedRows,
           missing_required_targets: missingAllRequiredTargets,
@@ -531,17 +1175,19 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: jobUpdateError?.message || 'Unable to finalize import job.' }, 500);
     }
 
-    const summaryMessage = failedRows === 0
-      ? `Imported ${successRows} ${successRows === 1 ? 'record' : 'records'} successfully.`
-      : successRows === 0
-        ? `Import failed for all ${failedRows} ${failedRows === 1 ? 'row' : 'rows'}.`
-        : `Imported ${successRows} ${successRows === 1 ? 'record' : 'records'} with ${failedRows} failed ${failedRows === 1 ? 'row' : 'rows'}.`;
+    const changedRows = createdRows + updatedRows;
+    const summaryMessage = failedRows > 0
+      ? `Created ${createdRows}, updated ${updatedRows}, skipped ${skippedRows}, failed ${failedRows}.`
+      : `Created ${createdRows}, updated ${updatedRows}, skipped ${skippedRows}.`;
 
     return jsonResponse({
       job: completedJob,
       importExecutionImplemented: true,
       totalRows: importRows.length,
-      importedCount: successRows,
+      importedCount: changedRows,
+      createdCount: createdRows,
+      updatedCount: updatedRows,
+      skippedCount: skippedRows,
       failedCount: failedRows,
       failures: rowFailures.slice(0, 10),
       message: summaryMessage,

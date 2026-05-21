@@ -257,7 +257,7 @@ npm run supabase:set-secrets:prod
 npm run supabase:set-secrets:local
 ```
 
-These commands set app/OAuth secrets (`APP_URL`, `FRONTEND_URL`, OAuth client IDs/secrets, encryption key).  
+These commands set app/OAuth secrets (`APP_URL`, `FRONTEND_URL`, `EMAIL_OAUTH_CALLBACK_URL`, OAuth client IDs/secrets, encryption key).  
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected by Supabase automatically for Edge Functions.
 
 Both commands call:
@@ -270,6 +270,7 @@ Before running, fill these in `supabase/.env`:
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `EMAIL_CREDENTIALS_ENCRYPTION_KEY`
+- Optional callback override: `EMAIL_OAUTH_CALLBACK_URL` (recommended prod: `https://email.triadflair.com/api/oauth/email-callback`)
 
 Generate encryption key:
 

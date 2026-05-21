@@ -1,4 +1,5 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import { isLegacyRecordFieldKey } from '../_shared/legacy-record-fields.ts';
 import { authenticateRequest, ensureWorkspaceRole } from '../_shared/server.ts';
 
 function getString(value: unknown) {
@@ -40,7 +41,7 @@ Deno.serve(async (request) => {
     }
 
     return jsonResponse({
-      fields: data ?? [],
+      fields: (data ?? []).filter((field) => !isLegacyRecordFieldKey(field.field_key)),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error.';

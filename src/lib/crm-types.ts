@@ -236,6 +236,9 @@ export interface ImportJobResult {
   importExecutionImplemented: boolean;
   totalRows: number;
   importedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
   failedCount: number;
   failures: Array<{
     rowIndex: number;

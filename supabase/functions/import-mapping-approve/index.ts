@@ -9,6 +9,7 @@ const allowedCoreTargetKeys = new Set([
   'email',
   'phone',
   'status',
+  'priority',
 ]);
 const requiredLeadTargets = new Set(['core:full_name', 'core:email']);
 

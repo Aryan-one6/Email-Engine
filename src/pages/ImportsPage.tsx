@@ -22,6 +22,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import { parseCsv } from '../lib/csv';
+import { isLegacyRecordFieldKey } from '../lib/legacy-record-fields';
 import {
   analyzeImportMappings,
   approveImportMappings,
@@ -81,6 +82,10 @@ interface PendingNewField {
   selected: boolean;
 }
 
+function getVisibleCustomFields(config: CrmWorkspaceConfig) {
+  return config.customFields.filter((field) => !isLegacyRecordFieldKey(field.field_key));
+}
+
 function guessMapping(column: string, config: CrmWorkspaceConfig): ImportMappingInput | null {
   const normalized = column.toLowerCase().trim().replace(/\s+/g, '_');
   const coreTarget = coreTargets.find((target) => target.key === normalized);
@@ -89,7 +94,7 @@ function guessMapping(column: string, config: CrmWorkspaceConfig): ImportMapping
     return { source_column: column, target_type: 'core', target_key: coreTarget.key };
   }
 
-  const customTarget = config.customFields.find((field) => field.field_key === normalized);
+  const customTarget = getVisibleCustomFields(config).find((field) => field.field_key === normalized);
 
   if (customTarget) {
     return { source_column: column, target_type: 'custom', target_key: customTarget.field_key };
@@ -173,6 +178,10 @@ export function ImportsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<ImportJobResult | null>(null);
   const isOwner = isWorkspaceOwner(workspace);
+  const visibleCustomFields = useMemo(
+    () => (config ? getVisibleCustomFields(config) : []),
+    [config],
+  );
 
   async function handleSignOut() {
     await signOut();
@@ -189,7 +198,7 @@ export function ImportsPage() {
       label: `Core: ${target.label}`,
       required: REQUIRED_LEAD_CORE_TARGET_KEYS.has(target.key),
     }));
-    const custom = config.customFields.map((field) => ({
+    const custom = visibleCustomFields.map((field) => ({
       target_type: 'custom' as const,
       target_key: field.field_key,
       label: `Custom: ${field.label}`,
@@ -197,7 +206,7 @@ export function ImportsPage() {
     }));
 
     return [...core, ...custom];
-  }, [config]);
+  }, [config, visibleCustomFields]);
 
   const mappedTargetKeySet = useMemo(
     () => new Set(mappings.map((mapping) => `${mapping.target_type}:${mapping.target_key}`)),
@@ -222,8 +231,8 @@ export function ImportsPage() {
   );
 
   const customFieldByKey = useMemo(
-    () => new Map((config?.customFields ?? []).map((field) => [field.field_key, field])),
-    [config],
+    () => new Map(visibleCustomFields.map((field) => [field.field_key, field])),
+    [visibleCustomFields],
   );
 
   const validationIssuesCount = (analysis?.required_missing_targets.length ?? 0) + (analysis?.needs_confirmation_count ?? 0);
@@ -252,7 +261,7 @@ export function ImportsPage() {
       return 0;
     }
 
-    const existingCustomFieldKeys = new Set(config.customFields.map((field) => field.field_key));
+    const existingCustomFieldKeys = new Set(visibleCustomFields.map((field) => field.field_key));
 
     return unmappedSourceColumns
       .filter((column) => {
@@ -269,7 +278,7 @@ export function ImportsPage() {
         return true;
       })
       .length;
-  }, [config, coreTargetKeySet, unmappedSourceColumns]);
+  }, [config, coreTargetKeySet, unmappedSourceColumns, visibleCustomFields]);
 
   const workspaceFieldRows = useMemo(() => {
     const search = workspaceFieldSearch.trim().toLowerCase();
@@ -675,7 +684,7 @@ export function ImportsPage() {
       return [];
     }
 
-    const usedFieldKeys = new Set(config.customFields.map((field) => field.field_key));
+    const usedFieldKeys = new Set(visibleCustomFields.map((field) => field.field_key));
     let fallbackIndex = 1;
 
     return unmappedSourceColumns
@@ -1643,14 +1652,22 @@ export function ImportsPage() {
                     Job status: <span className="font-medium text-slate-900">{importResult.job.status}</span>
                   </div>
                 </div>
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                     <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Total rows</div>
                     <div className="mt-1 text-2xl font-semibold text-slate-900">{importResult.totalRows}</div>
                   </div>
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.22em] text-emerald-700">Imported</div>
-                    <div className="mt-1 text-2xl font-semibold text-emerald-900">{importResult.importedCount}</div>
+                    <div className="text-xs uppercase tracking-[0.22em] text-emerald-700">Created</div>
+                    <div className="mt-1 text-2xl font-semibold text-emerald-900">{importResult.createdCount}</div>
+                  </div>
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3">
+                    <div className="text-xs uppercase tracking-[0.22em] text-teal-700">Updated</div>
+                    <div className="mt-1 text-2xl font-semibold text-teal-900">{importResult.updatedCount}</div>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="text-xs uppercase tracking-[0.22em] text-amber-700">Skipped</div>
+                    <div className="mt-1 text-2xl font-semibold text-amber-900">{importResult.skippedCount}</div>
                   </div>
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
                     <div className="text-xs uppercase tracking-[0.22em] text-rose-700">Failed</div>

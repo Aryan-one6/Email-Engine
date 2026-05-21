@@ -55,14 +55,7 @@ export const crmTemplates: Record<CRMType, CrmTemplateDefinition> = {
       { name: 'Walk In', source_type: 'offline' },
       { name: 'Social Campaign', source_type: 'marketing' },
     ],
-    fields: [
-      { field_key: 'property_type', label: 'Property Type', field_type: 'select', options: ['Apartment', 'Villa', 'Plot', 'Commercial'], is_required: true, help_text: 'What kind of property is the lead interested in?' },
-      { field_key: 'budget', label: 'Budget', field_type: 'number', placeholder: '250000', help_text: 'Expected budget or spending ceiling.' },
-      { field_key: 'preferred_location', label: 'Preferred Location', field_type: 'text', placeholder: 'Downtown / Suburb', is_required: true },
-      { field_key: 'possession_timeline', label: 'Possession Timeline', field_type: 'select', options: ['Immediate', '1-3 months', '3-6 months', '6+ months'] },
-      { field_key: 'financing_required', label: 'Needs Financing', field_type: 'boolean', default_value: false },
-      { field_key: 'move_in_target_date', label: 'Target Move-In Date', field_type: 'date' },
-    ],
+    fields: [],
   },
   restaurant: {
     pipelineName: 'Restaurant Expansion Pipeline',

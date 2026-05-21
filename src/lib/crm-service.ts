@@ -21,6 +21,12 @@ import type {
   RecordSummary,
   RecordTask,
 } from './crm-types';
+import {
+  filterLegacyRecordFields,
+  isLegacyCustomTarget,
+  isLegacyRecordFieldKey,
+  isLegacyRequiredTargetLabel,
+} from './legacy-record-fields';
 
 const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
 const RECORDS_CACHE_TTL_MS = 30 * 1000;
@@ -42,6 +48,89 @@ function getAuthHeaders(session: Session) {
   };
 }
 
+function extractFunctionErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error.trim();
+  }
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message.trim();
+  }
+
+  if (typeof record.msg === 'string' && record.msg.trim()) {
+    return record.msg.trim();
+  }
+
+  if (record.error && typeof record.error === 'object') {
+    const nested = record.error as Record<string, unknown>;
+
+    if (typeof nested.message === 'string' && nested.message.trim()) {
+      return nested.message.trim();
+    }
+  }
+
+  return null;
+}
+
+async function resolveInvokeErrorMessage(error: unknown) {
+  const fallback = error instanceof Error ? error.message : 'Request failed.';
+  const context = (error as { context?: unknown })?.context;
+
+  if (!context || typeof context !== 'object') {
+    return fallback;
+  }
+
+  const responseLike = context as {
+    status?: number;
+    statusText?: string;
+    clone?: () => { json?: () => Promise<unknown>; text?: () => Promise<string> };
+    json?: () => Promise<unknown>;
+    text?: () => Promise<string>;
+  };
+
+  const status = typeof responseLike.status === 'number' ? responseLike.status : null;
+  const statusText = typeof responseLike.statusText === 'string' && responseLike.statusText.trim()
+    ? responseLike.statusText.trim()
+    : null;
+
+  let details: string | null = null;
+
+  try {
+    const reader = typeof responseLike.clone === 'function' ? responseLike.clone() : responseLike;
+
+    if (typeof reader.json === 'function') {
+      const payload = await reader.json();
+      details = extractFunctionErrorMessage(payload);
+    }
+
+    if (!details && typeof reader.text === 'function') {
+      const rawText = (await reader.text()).trim();
+
+      if (rawText) {
+        details = rawText;
+      }
+    }
+  } catch {
+    // Fall back to default message.
+  }
+
+  const statusPrefix = status
+    ? `Edge function failed (${status}${statusText ? ` ${statusText}` : ''})`
+    : 'Edge function failed';
+
+  if (details) {
+    return `${statusPrefix}: ${details}`;
+  }
+
+  return fallback || statusPrefix;
+}
+
 async function invoke<TResponse>(name: string, session: Session, body?: unknown) {
   const client = getSupabaseClient();
   const { data, error } = await client.functions.invoke<TResponse>(name, {
@@ -50,7 +139,7 @@ async function invoke<TResponse>(name: string, session: Session, body?: unknown)
   });
 
   if (error) {
-    throw new Error(error.message || 'Request failed.');
+    throw new Error(await resolveInvokeErrorMessage(error));
   }
 
   return data as TResponse;
@@ -123,8 +212,51 @@ function invalidateRecordDetail(workspaceId: string, recordId: string) {
   recordDetailCache.delete(createRecordDetailCacheKey(workspaceId, recordId));
 }
 
+function sanitizeCrmWorkspaceConfig(config: CrmWorkspaceConfig): CrmWorkspaceConfig {
+  return {
+    ...config,
+    customFields: filterLegacyRecordFields(config.customFields ?? []),
+  };
+}
+
+function sanitizeImportAnalyzeResult(result: ImportAnalyzeResult): ImportAnalyzeResult {
+  const suggestions = (result.suggestions ?? []).filter(
+    (item) => !isLegacyCustomTarget(item.target_type, item.target_key),
+  );
+  const requiredMissingTargets = (result.required_missing_targets ?? []).filter(
+    (target) => !isLegacyRequiredTargetLabel(target),
+  );
+
+  return {
+    ...result,
+    suggestions,
+    required_missing_targets: requiredMissingTargets,
+    needs_confirmation_count: suggestions.filter((item) => item.status === 'needs_confirmation').length,
+    new_semantic_count: suggestions.filter((item) => item.status === 'new_semantic').length,
+  };
+}
+
+function sanitizeImportIntelligenceConfig(result: ImportIntelligenceConfigResult): ImportIntelligenceConfigResult {
+  return {
+    ...result,
+    bindings: (result.bindings ?? []).filter(
+      (item) => !isLegacyCustomTarget(item.target_type, item.target_key),
+    ),
+    transform_rules: (result.transform_rules ?? []).filter(
+      (item) => !isLegacyCustomTarget(item.target_type, item.target_key),
+    ),
+    option_aliases: (result.option_aliases ?? []).filter(
+      (item) => !isLegacyRecordFieldKey(item.field_key),
+    ),
+    custom_fields: (result.custom_fields ?? []).filter(
+      (item) => !isLegacyRecordFieldKey(item.field_key),
+    ),
+  };
+}
+
 export function getCachedCrmWorkspaceConfig(workspaceId: string) {
-  return configCache.get(workspaceId)?.data ?? null;
+  const cached = configCache.get(workspaceId)?.data ?? null;
+  return cached ? sanitizeCrmWorkspaceConfig(cached) : null;
 }
 
 export function isCrmWorkspaceConfigCacheFresh(workspaceId: string) {
@@ -147,11 +279,12 @@ export async function fetchCrmWorkspaceConfig(session: Session, workspaceId: str
     workspace_id: workspaceId,
   })
     .then((config) => {
+      const sanitized = sanitizeCrmWorkspaceConfig(config);
       configCache.set(workspaceId, {
-        data: config,
+        data: sanitized,
         fetchedAt: Date.now(),
       });
-      return config;
+      return sanitized;
     })
     .catch((error) => {
       if (cachedEntry?.data) {
@@ -177,11 +310,12 @@ export async function refreshCrmWorkspaceConfig(session: Session, workspaceId: s
     workspace_id: workspaceId,
   })
     .then((config) => {
+      const sanitized = sanitizeCrmWorkspaceConfig(config);
       configCache.set(workspaceId, {
-        data: config,
+        data: sanitized,
         fetchedAt: Date.now(),
       });
-      return config;
+      return sanitized;
     })
     .catch((error) => {
       if (cachedEntry?.data) {
@@ -210,13 +344,14 @@ export async function updateWorkspaceCustomFields(
     workspace_id: workspaceId,
     custom_fields: customFields,
   });
+  const sanitized = sanitizeCrmWorkspaceConfig(nextConfig);
 
   configCache.set(workspaceId, {
-    data: nextConfig,
+    data: sanitized,
     fetchedAt: Date.now(),
   });
 
-  return nextConfig;
+  return sanitized;
 }
 
 export async function fetchWorkspaceCustomFields(session: Session, workspaceId: string) {
@@ -224,7 +359,7 @@ export async function fetchWorkspaceCustomFields(session: Session, workspaceId: 
     workspace_id: workspaceId,
   });
 
-  return response.fields ?? [];
+  return filterLegacyRecordFields(response.fields ?? []);
 }
 
 export function getCachedWorkspaceRecords(filters: RecordListQuery) {
@@ -423,7 +558,8 @@ export async function createImportJob(session: Session, payload: ImportJobInput)
 }
 
 export async function analyzeImportMappings(session: Session, payload: ImportAnalyzeInput) {
-  return invoke<ImportAnalyzeResult>('import-analyze', session, payload);
+  const result = await invoke<ImportAnalyzeResult>('import-analyze', session, payload);
+  return sanitizeImportAnalyzeResult(result);
 }
 
 export async function approveImportMappings(session: Session, payload: ImportMappingApproveInput) {
@@ -448,7 +584,8 @@ export async function resolveImportProfile(session: Session, payload: { workspac
 }
 
 export async function getImportIntelligenceConfig(session: Session, payload: { workspace_id: string }) {
-  return invoke<ImportIntelligenceConfigResult>('import-intelligence-config-get', session, payload);
+  const result = await invoke<ImportIntelligenceConfigResult>('import-intelligence-config-get', session, payload);
+  return sanitizeImportIntelligenceConfig(result);
 }
 
 export async function saveImportIntelligenceConfig(session: Session, payload: ImportIntelligenceConfigSaveInput) {

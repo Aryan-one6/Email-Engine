@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { getWorkspaceCrmType } from '../_shared/import-intelligence.ts';
+import { isLegacyRecordFieldKey } from '../_shared/legacy-record-fields.ts';
 import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
 
 Deno.serve(async (request) => {
@@ -84,7 +85,7 @@ Deno.serve(async (request) => {
       bindings: (bindingsResult.data ?? []).map((item) => ({ ...item, scope: item.crm_type ? 'crm' : 'workspace' })),
       transform_rules: (rulesResult.data ?? []).map((item) => ({ ...item, scope: item.crm_type ? 'crm' : 'workspace' })),
       option_aliases: (optionAliasesResult.data ?? []).map((item) => ({ ...item, scope: item.crm_type ? 'crm' : 'workspace' })),
-      custom_fields: customFieldsResult.data ?? [],
+      custom_fields: (customFieldsResult.data ?? []).filter((field) => !isLegacyRecordFieldKey(field.field_key)),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error.';

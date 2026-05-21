@@ -19,15 +19,57 @@ function randomBase64Url(length = 32) {
   return toBase64Url(bytes);
 }
 
+function resolveAppCallbackUrl() {
+  const appUrl = normalizeString(Deno.env.get('APP_URL')) || normalizeString(Deno.env.get('FRONTEND_URL'));
+  if (!appUrl) {
+    return '';
+  }
+
+  try {
+    return new URL('/api/oauth/email-callback', appUrl).toString();
+  } catch {
+    return '';
+  }
+}
+
+function normalizeUrlForComparison(rawUrl: string) {
+  if (!rawUrl) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.hash = '';
+    if (parsed.pathname.length > 1) {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    }
+    return parsed.toString();
+  } catch {
+    return rawUrl.replace(/\/+$/, '');
+  }
+}
+
 function resolveCallbackUrl() {
   const explicitCallback = normalizeString(Deno.env.get('EMAIL_OAUTH_CALLBACK_URL'));
+  const supabaseUrl = normalizeString(Deno.env.get('SUPABASE_URL'));
+  const defaultSupabaseCallback = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/email-oauth-callback` : '';
+  const appCallback = resolveAppCallbackUrl();
+
   if (explicitCallback) {
+    const explicitNormalized = normalizeUrlForComparison(explicitCallback);
+    const defaultSupabaseNormalized = normalizeUrlForComparison(defaultSupabaseCallback);
+    if (explicitNormalized === defaultSupabaseNormalized && appCallback) {
+      return appCallback;
+    }
     return explicitCallback;
   }
 
-  const supabaseUrl = normalizeString(Deno.env.get('SUPABASE_URL'));
+  if (appCallback) {
+    return appCallback;
+  }
+
   if (!supabaseUrl) {
-    throw new Error('SUPABASE_URL is required to resolve OAuth callback URL.');
+    throw new Error('SUPABASE_URL is required when APP_URL/FRONTEND_URL callback is not configured.');
   }
 
   return `${supabaseUrl}/functions/v1/email-oauth-callback`;
