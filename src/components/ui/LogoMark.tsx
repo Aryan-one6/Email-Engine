@@ -12,8 +12,8 @@ export function LogoMark({ className, showSubtitle = true, theme = 'light' }: Lo
   return (
     <div className={cn('inline-flex items-center', className)}>
       <img
-        src="/Email_Automation.webp"
-        alt="Email Automation Platform"
+        src="/Email_Auto.png"
+        alt="Email Intelligence"
         className={cn(
           'w-auto object-contain',
           showSubtitle ? 'h-10' : 'h-9',

@@ -1,14 +1,34 @@
-import { ArrowRight, CircleHelp, FileStack, Gem, LogIn, Menu, ShieldCheck, Sparkles, X } from 'lucide-react';
+import {
+  ArrowRight,
+  BookOpenText,
+  CircleHelp,
+  FileStack,
+  Gem,
+  LogIn,
+  Menu,
+  ShieldCheck,
+  Sparkles,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LogoMark } from '../ui/LogoMark';
 
-const navLinks = [
-  { label: 'Features', href: '#features', icon: FileStack },
-  { label: 'Proof', href: '#proof', icon: ShieldCheck },
-  { label: 'How It Works', href: '#how-it-works', icon: Sparkles },
-  { label: 'Pricing', href: '#pricing', icon: Gem },
-  { label: 'FAQ', href: '#faq', icon: CircleHelp },
+interface NavLinkItem {
+  label: string;
+  icon: LucideIcon;
+  href?: string;
+  to?: string;
+}
+
+const navLinks: NavLinkItem[] = [
+  { label: 'Features', href: '/#features', icon: FileStack },
+  { label: 'Proof', href: '/#proof', icon: ShieldCheck },
+  { label: 'How It Works', href: '/#how-it-works', icon: Sparkles },
+  { label: 'Pricing', href: '/#pricing', icon: Gem },
+  { label: 'Blogs', to: '/blogs', icon: BookOpenText },
+  { label: 'FAQ', href: '/#faq', icon: CircleHelp },
 ];
 
 export function HomeNavbar() {
@@ -36,14 +56,25 @@ export function HomeNavbar() {
               {navLinks.map((link) => {
                 const Icon = link.icon;
                 return (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    className="inline-flex items-center gap-1.5 transition duration-200 hover:text-indigo-200"
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    <span>{link.label}</span>
-                  </a>
+                  link.to ? (
+                    <Link
+                      key={link.label}
+                      to={link.to}
+                      className="inline-flex items-center gap-1.5 transition duration-200 hover:text-indigo-200"
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{link.label}</span>
+                    </Link>
+                  ) : (
+                    <a
+                      key={link.label}
+                      href={link.href}
+                      className="inline-flex items-center gap-1.5 transition duration-200 hover:text-indigo-200"
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{link.label}</span>
+                    </a>
+                  )
                 );
               })}
             </nav>
@@ -90,15 +121,27 @@ export function HomeNavbar() {
               {navLinks.map((link) => {
                 const Icon = link.icon;
                 return (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-indigo-200"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{link.label}</span>
-                  </a>
+                  link.to ? (
+                    <Link
+                      key={link.label}
+                      to={link.to}
+                      className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-indigo-200"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{link.label}</span>
+                    </Link>
+                  ) : (
+                    <a
+                      key={link.label}
+                      href={link.href}
+                      className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-indigo-200"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{link.label}</span>
+                    </a>
+                  )
                 );
               })}
               <div className="mt-2 grid grid-cols-2 gap-2">

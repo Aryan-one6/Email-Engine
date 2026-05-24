@@ -8,7 +8,6 @@ import { RecordCreateDrawer } from '../components/records/RecordCreateDrawer';
 import { RecordEditDrawer } from '../components/records/RecordEditDrawer';
 import { RecordList, RecordListSkeleton } from '../components/records/RecordList';
 import { RecordQuickActionDrawer, type RecordQuickActionMode } from '../components/records/RecordQuickActionDrawer';
-import { buttonStyles } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
@@ -38,11 +37,11 @@ const defaultFilters: Omit<RecordListFilters, 'workspace_id'> = {
 const defaultPage = 1;
 const defaultPageSize = 10;
 const metricCardTheme = {
-  border: 'border-[#d7ddea]',
-  background: 'bg-[linear-gradient(145deg,#ffffff_0%,#f8faff_62%,#f4f7fd_100%)]',
-  glow: 'bg-[radial-gradient(circle,rgba(61,82,120,0.1)_0%,rgba(61,82,120,0)_72%)]',
-  topAccent: 'bg-[linear-gradient(90deg,rgba(140,154,178,0.45)_0%,rgba(167,179,199,0.34)_55%,rgba(196,204,218,0.26)_100%)]',
-  value: 'text-[#1b2a44]',
+  border: 'border-white/[0.08]',
+  background: 'bg-[linear-gradient(140deg,rgba(255,255,255,0.045)_0%,rgba(255,255,255,0.02)_62%,rgba(255,255,255,0.01)_100%)]',
+  glow: 'bg-[radial-gradient(circle,rgba(0,210,255,0.14)_0%,rgba(0,210,255,0)_74%)]',
+  topAccent: 'bg-[linear-gradient(90deg,rgba(0,210,255,0.46)_0%,rgba(164,244,253,0.32)_60%,rgba(11,37,81,0.2)_100%)]',
+  value: 'text-white',
 };
 
 function createEmptyRecordPage(page = defaultPage, pageSize = defaultPageSize): RecordListPageResult {
@@ -597,22 +596,22 @@ export function RecordsPage() {
   }
 
   return (
-    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut} mainBackgroundClassName="bg-[#f3f3f3]">
-      <div className="space-y-5 bg-[#f3f3f3] p-4 sm:p-6">
+    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
+      <div className="workspace-theme space-y-5 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#546190]">Email workspace</div>
-            <h1 className="mt-1 font-display text-[44px] leading-[1.02] tracking-tight text-[#1c2a3d]">Records</h1>
-            <p className="mt-2 text-sm font-medium text-[#667086]">Simple lead queue for email campaigns and follow-ups.</p>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#00d2ff]">Email workspace</div>
+            <h1 className="mt-1 font-display text-[44px] leading-[1.02] tracking-tight text-white">Records</h1>
+            <p className="mt-2 text-sm font-medium text-white/50">Simple lead queue for email campaigns and follow-ups.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d9deea] bg-white px-3.5 text-sm font-semibold text-[#4f586e] shadow-sm">
+            <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm font-semibold text-white/75">
               <CalendarDays className="h-4 w-4" />
               {todayLabel}
             </span>
             <Link
               to="/imports"
-              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#d9deea] bg-white px-4 text-sm font-semibold text-[#4f586e] shadow-sm transition hover:bg-[#f8faff]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white/70 transition hover:bg-white/[0.09] hover:text-white"
               data-guide-id="records-import-button"
             >
               <Download className="h-4 w-4" />
@@ -621,7 +620,7 @@ export function RecordsPage() {
             <button
               type="button"
               onClick={handleOpenCreateDrawer}
-              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[#4c39df] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_-12px_rgba(76,57,223,0.68)] transition hover:bg-[#412fd0]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-white px-4 text-sm font-semibold text-black shadow-[0_12px_24px_-16px_rgba(255,255,255,0.58)] transition hover:bg-white/90"
               data-guide-id="records-create-button"
             >
               <Plus className="h-4 w-4" />
@@ -631,11 +630,13 @@ export function RecordsPage() {
         </div>
 
         {configRefreshing ? (
-          <Card className="border border-[#d9deea] bg-white p-4 text-sm font-medium text-[#4f586e] shadow-none">Refreshing workspace config in the background...</Card>
+          <Card className="border border-white/[0.08] bg-white/[0.03] p-4 text-sm font-medium text-white/65 shadow-none">
+            Refreshing workspace config in the background...
+          </Card>
         ) : null}
 
         {configError && !config ? (
-          <Card className="border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{configError}</Card>
+          <Card className="border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">{configError}</Card>
         ) : null}
 
         {config ? (
@@ -647,15 +648,15 @@ export function RecordsPage() {
               return (
                 <Card
                   key={metric.label}
-                  className={`group relative overflow-hidden p-5 shadow-[0_12px_24px_-18px_rgba(20,35,64,0.45)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_32px_-18px_rgba(20,35,64,0.58)] ${theme.border} ${theme.background}`}
+                  className={`group relative overflow-hidden p-5 shadow-[0_18px_30px_-24px_rgba(0,0,0,0.8)] transition duration-200 hover:-translate-y-0.5 hover:border-white/15 ${theme.border} ${theme.background}`}
                 >
                   <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${theme.topAccent} opacity-85 transition group-hover:opacity-100`} />
                   <div className={`pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full ${theme.glow}`} />
-                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.34)_0%,rgba(255,255,255,0)_45%)]" />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_45%)]" />
 
                   <div className="flex items-center justify-between gap-3">
-                    <div className="relative text-xs font-semibold uppercase tracking-[0.14em] text-[#5a6688]">{metric.label}</div>
-                    <span className="relative rounded-full border border-[#d4dcec] bg-white/92 px-2.5 py-1 text-[11px] font-semibold text-[#677291] shadow-[0_1px_0_rgba(255,255,255,0.75),inset_0_1px_0_rgba(255,255,255,0.92)]">
+                    <div className="relative text-xs font-semibold uppercase tracking-[0.14em] text-white/45">{metric.label}</div>
+                    <span className="relative rounded-full border border-white/12 bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-white/55">
                       +{trendValue.toFixed(1)}%
                     </span>
                   </div>
@@ -674,9 +675,9 @@ export function RecordsPage() {
         )}
 
         {config ? (
-          <Card className="border border-[#d9deea] bg-stone-50 p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+          <Card className="border border-white/[0.08] bg-white/[0.03] p-0 shadow-[0_18px_30px_-24px_rgba(0,0,0,0.8)]">
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-5 border-b border-[#e4e6e9] px-5 py-3">
+              <div className="flex flex-wrap items-center gap-5 border-b border-white/[0.08] px-5 py-3">
                 {[
                   { key: 'all', label: 'All Leads', status: null, includeArchived: false },
                   { key: 'new', label: 'New', status: 'new', includeArchived: false },
@@ -701,8 +702,8 @@ export function RecordsPage() {
                       }
                       className={
                         isActive
-                          ? 'border-b-2 border-[#4c39df] px-0.5 py-1 text-xs font-semibold text-[#4c39df]'
-                          : 'border-b-2 border-transparent px-0.5 py-1 text-xs font-semibold text-[#747c90] transition hover:text-[#50576c]'
+                          ? 'border-b-2 border-[#00d2ff] px-0.5 py-1 text-xs font-semibold text-[#A4F4FD]'
+                          : 'border-b-2 border-transparent px-0.5 py-1 text-xs font-semibold text-white/45 transition hover:text-white/75'
                       }
                     >
                       {tab.label}
@@ -720,7 +721,7 @@ export function RecordsPage() {
                       source_id: event.target.value || null,
                     }))
                   }
-                  className="h-10 rounded-lg border border-[#d9deea] bg-[#ffffff] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
+                  className="h-10 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-sm font-medium text-white/80 focus:border-white/20 focus:outline-none"
                 >
                   <option value="">All sources</option>
                   {config.sources.map((source) => (
@@ -735,7 +736,7 @@ export function RecordsPage() {
                     setFilters(defaultFilters);
                     setPage(defaultPage);
                   }}
-                  className="inline-flex h-10 items-center justify-center rounded-lg bg-[#4c39df] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_-12px_rgba(76,57,223,0.68)] transition hover:bg-[#412fd0]"
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white/80 transition hover:bg-white/[0.1] hover:text-white"
                 >
                   Reset filters
                 </button>
@@ -754,7 +755,7 @@ export function RecordsPage() {
                           include_archived: chip.key === 'status' ? false : current.include_archived,
                         }))
                       }
-                      className="ml-5 rounded-md border border-[#dce1ee] bg-[#f4f6fa] px-3 py-1 text-xs font-semibold text-[#5d6680] transition hover:border-[#cbd2e3]"
+                      className="ml-5 rounded-md border border-white/12 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-white/70 transition hover:border-white/20 hover:text-white"
                     >
                       {chip.label}: {chip.value} x
                     </button>
@@ -844,7 +845,7 @@ export function RecordsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-900/55"
+            className="absolute inset-0 bg-black/70"
             aria-label="Close delete confirmation"
             onClick={() => {
               if (!deletingRecords) {
@@ -852,10 +853,10 @@ export function RecordsPage() {
               }
             }}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-600">Delete records</div>
-            <h3 className="mt-2 font-display text-2xl text-slate-900">Confirm bulk delete</h3>
-            <p className="mt-2 text-sm text-slate-600">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d0d0f] p-6 shadow-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-300">Delete records</div>
+            <h3 className="mt-2 font-display text-2xl text-white">Confirm bulk delete</h3>
+            <p className="mt-2 text-sm text-white/55">
               You selected {selectedVisibleRecordIds.length} record{selectedVisibleRecordIds.length === 1 ? '' : 's'}.
               This action cannot be undone.
             </p>
@@ -864,7 +865,7 @@ export function RecordsPage() {
                 type="button"
                 disabled={deletingRecords}
                 onClick={() => setIsDeleteConfirmOpen(false)}
-                className={buttonStyles('secondary', 'sm')}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-medium text-white/75 transition hover:bg-white/[0.1] hover:text-white disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -872,7 +873,7 @@ export function RecordsPage() {
                 type="button"
                 disabled={deletingRecords}
                 onClick={() => void handleConfirmDeleteSelected()}
-                className={buttonStyles('danger', 'sm')}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/20 px-4 text-sm font-medium text-rose-100 transition hover:bg-rose-500/30 disabled:opacity-50"
               >
                 {deletingRecords ? 'Deleting...' : 'Confirm delete'}
               </button>

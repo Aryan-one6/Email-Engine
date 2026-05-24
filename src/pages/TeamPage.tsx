@@ -310,7 +310,7 @@ export function TeamPage() {
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="mx-auto max-w-[92rem] space-y-6 px-4 pb-8">
+      <div className="workspace-theme mx-auto max-w-[92rem] space-y-6 px-4 pb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-3xl font-semibold tracking-tight text-slate-950">

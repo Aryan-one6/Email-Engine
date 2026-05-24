@@ -158,10 +158,11 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+        sans: ['Inter', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
         display: ['"Sora"', 'sans-serif'],
       },
       colors: {
+        brand: '#3D81E3',
         surface: {
           950: '#EEF0F7',
           900: '#F4F6FB',
@@ -189,6 +190,7 @@ export default {
         shimmer: 'shimmer 14s linear infinite',
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.4s ease-out',
+        shiny: 'shiny 6s linear infinite',
       },
       keyframes: {
         float: {
@@ -206,6 +208,10 @@ export default {
         slideUp: {
           '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        shiny: {
+          '0%': { backgroundPosition: '-200% center' },
+          '100%': { backgroundPosition: '200% center' },
         },
       },
     },

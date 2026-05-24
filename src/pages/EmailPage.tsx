@@ -690,45 +690,47 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
-      <div className="mb-6 flex items-start justify-between gap-4" data-guide-id="email-page-header">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Mail className="h-5 w-5" /></div>
-            <h1 className="font-display text-2xl font-bold text-slate-900">Email</h1>
+      <div className="workspace-theme space-y-5">
+        <div className="mb-6 flex items-start justify-between gap-4" data-guide-id="email-page-header">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Mail className="h-5 w-5" /></div>
+              <h1 className="font-display text-2xl font-bold text-slate-900">Email</h1>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">Configure providers, design templates, and automate follow-up sequences.</p>
           </div>
-          <p className="mt-1 text-sm text-slate-500">Configure providers, design templates, and automate follow-up sequences.</p>
+          <button onClick={reload} disabled={loading} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            <RefreshCw className={cls('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+          </button>
         </div>
-        <button onClick={reload} disabled={loading} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-          <RefreshCw className={cls('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
-        </button>
-      </div>
 
-      <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1" data-guide-id="email-page-tabs">
-        {TABS.map(tab => {
-          const Icon = tab.icon; const isActive = activeTab === tab.id;
-          return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={cls('flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-white text-violet-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white/60 hover:text-slate-700')}>
-              <Icon className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {error && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" /><span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto shrink-0"><X className="h-4 w-4 text-red-400 hover:text-red-600" /></button>
+        <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1" data-guide-id="email-page-tabs">
+          {TABS.map(tab => {
+            const Icon = tab.icon; const isActive = activeTab === tab.id;
+            return (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={cls('flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-white text-violet-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white/60 hover:text-slate-700')}>
+                <Icon className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
 
-      {loading && !data ? <LoadingSkeleton /> : (
-        <>
-          {activeTab === 'config' && <ConfigTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
-          {activeTab === 'templates' && <TemplatesTab workspaceId={workspace.id} customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
-          {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} leadOptions={leadOptions} />}
-        </>
-      )}
+        {error && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" /><span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto shrink-0"><X className="h-4 w-4 text-red-400 hover:text-red-600" /></button>
+          </div>
+        )}
+
+        {loading && !data ? <LoadingSkeleton /> : (
+          <>
+            {activeTab === 'config' && <ConfigTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
+            {activeTab === 'templates' && <TemplatesTab workspaceId={workspace.id} customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
+            {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} leadOptions={leadOptions} />}
+          </>
+        )}
+      </div>
     </WorkspaceLayout>
   );
 }

@@ -1,4 +1,5 @@
-import { CircleHelp, FileStack, Gavel, Gem, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { BookOpenText, CircleHelp, FileStack, Gavel, Gem, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LogoMark } from '../ui/LogoMark';
 
 export function HomeFooter() {
@@ -35,18 +36,22 @@ export function HomeFooter() {
                 <span>Product</span>
               </p>
               <div className="mt-3 space-y-2 text-slate-400">
-                <a href="#features" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#features" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <FileStack className="h-3.5 w-3.5 text-slate-500" />
                   <span>Features</span>
                 </a>
-                <a href="#how-it-works" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#how-it-works" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <Sparkles className="h-3.5 w-3.5 text-slate-500" />
                   <span>How It Works</span>
                 </a>
-                <a href="#proof" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#proof" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
                   <span>Social Proof</span>
                 </a>
+                <Link to="/blogs" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                  <BookOpenText className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Blogs</span>
+                </Link>
               </div>
             </div>
 
@@ -56,15 +61,15 @@ export function HomeFooter() {
                 <span>Company</span>
               </p>
               <div className="mt-3 space-y-2 text-slate-400">
-                <a href="#testimonials" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#testimonials" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <Users className="h-3.5 w-3.5 text-slate-500" />
                   <span>Customers</span>
                 </a>
-                <a href="#pricing" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#pricing" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <Gem className="h-3.5 w-3.5 text-slate-500" />
                   <span>Pricing</span>
                 </a>
-                <a href="#faq" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                <a href="/#faq" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
                   <CircleHelp className="h-3.5 w-3.5 text-slate-500" />
                   <span>FAQ</span>
                 </a>

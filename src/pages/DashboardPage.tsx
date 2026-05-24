@@ -1,35 +1,34 @@
 import {
   Activity,
-  ArrowUpRight,
   BarChart3,
   CalendarDays,
   CheckCircle2,
   Clock3,
   Download,
+  Forward,
+  MoreHorizontal,
+  Paperclip,
   RefreshCw,
+  Reply,
+  Search,
+  Sparkles,
   Timer,
+  Trash2,
   TrendingUp,
+  Archive,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
-import { buttonStyles } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
-import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import { listWorkspaceRecords } from '../lib/crm-service';
 import type { RecordListQuery, RecordSummary } from '../lib/crm-types';
 import {
   buildOperationalMetrics,
-  formatActivityLabel,
-  formatFollowUpDateTime,
   formatRelativeDateTime,
-  getRecordFollowUpSummary,
-  getSourceName,
-  getStageName,
 } from '../lib/record-workbench';
 
 const DASHBOARD_PAGE_SIZE = 150;
@@ -43,30 +42,10 @@ interface DashboardRecordsSnapshot {
 }
 
 function buildDisplayName(record: RecordSummary) {
-  const title = record.title?.trim();
-  if (title) {
-    return title;
-  }
-
-  const fullName = record.full_name?.trim();
-  if (fullName) {
-    return fullName;
-  }
-
-  const companyName = record.company_name?.trim();
-  if (companyName) {
-    return companyName;
-  }
-
-  const email = record.email?.trim();
-  if (email) {
-    return email;
-  }
-
-  return 'Untitled record';
+  return record.title?.trim() || record.full_name?.trim() || record.company_name?.trim() || record.email?.trim() || 'Untitled';
 }
 
-async function fetchDashboardRecords(sessionToken: Parameters<typeof listWorkspaceRecords>[0], workspaceId: string) {
+async function fetchDashboardRecords(sessionToken: Parameters<typeof listWorkspaceRecords>[0], workspaceId: string): Promise<DashboardRecordsSnapshot> {
   const baseQuery = {
     workspace_id: workspaceId,
     search: '',
@@ -82,575 +61,375 @@ async function fetchDashboardRecords(sessionToken: Parameters<typeof listWorkspa
   const allRecords: RecordSummary[] = [];
 
   while (page <= DASHBOARD_MAX_PAGES) {
-    const pageResult = await listWorkspaceRecords(sessionToken, {
-      ...baseQuery,
-      page,
-      pageSize: DASHBOARD_PAGE_SIZE,
-    });
-
-    if (page === 1) {
-      totalRecords = pageResult.total;
-    }
-
+    const pageResult = await listWorkspaceRecords(sessionToken, { ...baseQuery, page, pageSize: DASHBOARD_PAGE_SIZE });
+    if (page === 1) totalRecords = pageResult.total;
     allRecords.push(...pageResult.items);
-
-    if (!pageResult.hasNextPage) {
-      return {
-        records: allRecords,
-        totalRecords,
-        truncated: false,
-      } satisfies DashboardRecordsSnapshot;
-    }
-
+    if (!pageResult.hasNextPage) return { records: allRecords, totalRecords, truncated: false };
     page += 1;
   }
 
-  return {
-    records: allRecords,
-    totalRecords,
-    truncated: true,
-  } satisfies DashboardRecordsSnapshot;
+  return { records: allRecords, totalRecords, truncated: true };
 }
+
+/* ─── Static campaign inbox data (mirrors landing page InboxMockup) ──────── */
+
+const inboxCampaigns = [
+  { id: '1', from: 'Onboarding Sequence', subject: 'Welcome to Email Engine — Day 1', preview: '3,240 sent · 68% open · 24% clicked', time: '9:41 AM', unread: true, active: true, tag: 'Active', tagColor: '#00d2ff', openRate: '68%', clickRate: '24%', sent: '3,240' },
+  { id: '2', from: 'Product Update', subject: 'New AI features just shipped 🚀', preview: '12,480 sent · 52% open · 18% clicked', time: '8:12 AM', unread: true, active: false, tag: 'Active', tagColor: '#00d2ff', openRate: '52%', clickRate: '18%', sent: '12,480' },
+  { id: '3', from: 'Re-engagement', subject: "We miss you — here's what's new", preview: '5,600 sent · 41% open · 9% clicked', time: 'Yesterday', unread: false, active: false, tag: 'Completed', tagColor: '#10b981', openRate: '41%', clickRate: '9%', sent: '5,600' },
+  { id: '4', from: 'Follow-up Sequence', subject: 'Did you get a chance to check in?', preview: '890 queued · Auto-sends in 2h 14m', time: 'Yesterday', unread: false, active: false, tag: 'Queued', tagColor: '#f59e0b', openRate: '—', clickRate: '—', sent: '890' },
+  { id: '5', from: 'Weekly Digest', subject: 'Your team sent 42 emails this week', preview: '12 sequences active · 3 paused', time: 'Mon', unread: false, active: false, tag: 'Report', tagColor: '#A4F4FD', openRate: '—', clickRate: '—', sent: '—' },
+  { id: '6', from: 'Cold Outreach v4', subject: 'Template approved by team', preview: 'Sarah approved your template edit.', time: 'Mon', unread: false, active: false, tag: 'Template', tagColor: '#a78bfa', openRate: '—', clickRate: '—', sent: '—' },
+];
+
+/* ─── Dark metric card ───────────────────────────────────────────────────── */
+
+function MetricCard({ label, value, hint, icon: Icon, glow }: { label: string; value: number | string; hint: string; icon: React.ComponentType<{ className?: string }>; glow: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5">
+      <div className="absolute inset-0 pointer-events-none" style={{ background: glow }} />
+      <div className="relative flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{label}</p>
+          <p className="mt-3 text-3xl font-semibold text-white">{typeof value === 'number' ? numberFormatter.format(value) : value}</p>
+          <p className="mt-1 text-xs text-white/40">{hint}</p>
+        </div>
+        <div className="w-8 h-8 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-4 w-4 text-white/50" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main DashboardPage ─────────────────────────────────────────────────── */
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { session, workspace, signOut } = useAuth();
-  const { config, configError, configLoading, configRefreshing } = useCrmWorkspace();
+  const { config, configLoading } = useCrmWorkspace();
   const workspaceId = workspace?.id ?? null;
   const requestIdRef = useRef(0);
 
   const [records, setRecords] = useState<RecordSummary[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [isTruncated, setIsTruncated] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataRefreshing, setDataRefreshing] = useState(false);
-  const [dataError, setDataError] = useState<string | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState(inboxCampaigns[0]);
 
   useEffect(() => {
-    if (!session || !workspaceId) {
-      return;
-    }
-
+    if (!session || !workspaceId) return;
     const requestId = ++requestIdRef.current;
-
     setDataLoading(true);
-    setDataRefreshing(false);
-    setDataError(null);
 
     void fetchDashboardRecords(session, workspaceId)
       .then((snapshot) => {
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
+        if (requestId !== requestIdRef.current) return;
         setRecords(snapshot.records);
         setTotalRecords(snapshot.totalRecords);
-        setIsTruncated(snapshot.truncated);
       })
-      .catch((error) => {
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
-        const message = error instanceof Error ? error.message : 'Unable to load dashboard records.';
-        setDataError(message);
-        toast.error(message);
+      .catch((err) => {
+        if (requestId !== requestIdRef.current) return;
+        toast.error(err instanceof Error ? err.message : 'Failed to load dashboard.');
       })
       .finally(() => {
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
-        setDataLoading(false);
+        if (requestId === requestIdRef.current) setDataLoading(false);
       });
   }, [session, workspaceId]);
 
   async function handleSignOut() {
     await signOut();
-    toast.success('Signed out successfully.');
-    navigate('/signin', { replace: true, state: { existingUser: true } });
+    toast.success('Signed out.');
+    navigate('/signin', { replace: true });
   }
 
   async function handleRefresh() {
-    if (!session || !workspaceId) {
-      return;
-    }
-
+    if (!session || !workspaceId) return;
     const requestId = ++requestIdRef.current;
-
     setDataRefreshing(true);
-    setDataError(null);
-
     try {
       const snapshot = await fetchDashboardRecords(session, workspaceId);
-
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-
+      if (requestId !== requestIdRef.current) return;
       setRecords(snapshot.records);
       setTotalRecords(snapshot.totalRecords);
-      setIsTruncated(snapshot.truncated);
       toast.success('Dashboard refreshed.');
-    } catch (error) {
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-
-      const message = error instanceof Error ? error.message : 'Unable to refresh dashboard records.';
-      setDataError(message);
-      toast.error(message);
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      toast.error(err instanceof Error ? err.message : 'Refresh failed.');
     } finally {
-      if (requestId === requestIdRef.current) {
-        setDataRefreshing(false);
-      }
+      if (requestId === requestIdRef.current) setDataRefreshing(false);
     }
   }
 
   const metrics = useMemo(() => (config ? buildOperationalMetrics(records, config) : []), [records, config]);
-
-  const metricValueByLabel = useMemo(() => {
-    return new Map(metrics.map((metric) => [metric.label, metric.value]));
-  }, [metrics]);
-
-  const stageDistribution = useMemo(() => {
-    if (!config) {
-      return [] as Array<{ id: string; name: string; count: number; color: string }>;
-    }
-
-    const counts = new Map<string, number>();
-    for (const record of records) {
-      const stageId = record.stage_id ?? 'unstaged';
-      counts.set(stageId, (counts.get(stageId) ?? 0) + 1);
-    }
-
-    const stages = config.pipelines
-      .flatMap((pipeline) => pipeline.stages)
-      .sort((left, right) => left.position - right.position)
-      .map((stage) => ({
-        id: stage.id,
-        name: stage.name,
-        count: counts.get(stage.id) ?? 0,
-        color: stage.color ?? '#64748b',
-      }));
-
-    const unstagedCount = counts.get('unstaged') ?? 0;
-    if (unstagedCount > 0) {
-      stages.push({
-        id: 'unstaged',
-        name: 'Unstaged',
-        count: unstagedCount,
-        color: '#94a3b8',
-      });
-    }
-
-    return stages.filter((item) => item.count > 0);
-  }, [config, records]);
-
-  const sourceDistribution = useMemo(() => {
-    if (!config) {
-      return [] as Array<{ name: string; count: number }>;
-    }
-
-    const counts = new Map<string, number>();
-
-    for (const record of records) {
-      const sourceName = getSourceName(config, record.source_id, record.imported_from);
-      counts.set(sourceName, (counts.get(sourceName) ?? 0) + 1);
-    }
-
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count)
-      .slice(0, 8);
-  }, [config, records]);
-
-  const statusDistribution = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const record of records) {
-      const rawStatus = record.status?.trim();
-      const statusName = rawStatus && rawStatus.length > 0
-        ? rawStatus
-            .split('_')
-            .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-            .join(' ')
-        : 'Unspecified';
-
-      counts.set(statusName, (counts.get(statusName) ?? 0) + 1);
-    }
-
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count)
-      .slice(0, 7);
-  }, [records]);
-
-  const followUps = useMemo(() => {
-    return records
-      .map((record) => {
-        const summary = getRecordFollowUpSummary(record);
-        const dueAt = record.next_follow_up_at ? new Date(record.next_follow_up_at).getTime() : Number.POSITIVE_INFINITY;
-
-        return {
-          record,
-          summary,
-          dueAt,
-        };
-      })
-      .filter((item) => item.summary.tone !== 'none' || (item.record.open_task_count ?? 0) > 0)
-      .sort((left, right) => left.dueAt - right.dueAt)
-      .slice(0, 8);
-  }, [records]);
-
-  const recentActivity = useMemo(() => {
-    return [...records]
-      .sort((left, right) => {
-        const leftTime = new Date(left.last_activity_at ?? left.updated_at).getTime();
-        const rightTime = new Date(right.last_activity_at ?? right.updated_at).getTime();
-        return rightTime - leftTime;
-      })
-      .slice(0, 8);
-  }, [records]);
-
+  const metricValueByLabel = useMemo(() => new Map(metrics.map((m) => [m.label, m.value])), [metrics]);
   const effectiveTotalRecords = totalRecords > 0 ? totalRecords : records.length;
 
-  const metricCards = useMemo(
-    () => [
-      {
-        label: 'Total records',
-        value: effectiveTotalRecords,
-        hint: 'All active records in this workspace.',
-        icon: BarChart3,
-        accent: 'from-sky-500/20 via-blue-500/10 to-transparent',
-      },
-      {
-        label: 'Open records',
-        value: metricValueByLabel.get('Open records') ?? 0,
-        hint: 'Still in active outreach stages.',
-        icon: Activity,
-        accent: 'from-indigo-500/20 via-violet-500/10 to-transparent',
-      },
-      {
-        label: 'Follow-ups due today',
-        value: metricValueByLabel.get('Follow-ups due today') ?? 0,
-        hint: 'Needs action before end of day.',
-        icon: CalendarDays,
-        accent: 'from-amber-500/24 via-orange-400/14 to-transparent',
-      },
-      {
-        label: 'Updated today',
-        value: metricValueByLabel.get('Updated today') ?? 0,
-        hint: 'Touched by your team today.',
-        icon: RefreshCw,
-        accent: 'from-cyan-500/20 via-teal-500/10 to-transparent',
-      },
-      {
-        label: 'Closed this week',
-        value: metricValueByLabel.get('Closed this week') ?? 0,
-        hint: 'Records moved to closed outcomes.',
-        icon: CheckCircle2,
-        accent: 'from-emerald-500/20 via-teal-500/12 to-transparent',
-      },
-      {
-        label: 'Stale records',
-        value: metricValueByLabel.get('Stale records') ?? 0,
-        hint: 'No activity for at least 7 days.',
-        icon: Timer,
-        accent: 'from-rose-500/20 via-orange-500/12 to-transparent',
-      },
-    ],
-    [effectiveTotalRecords, metricValueByLabel],
+  const recentActivity = useMemo(() =>
+    [...records]
+      .sort((a, b) => new Date(b.last_activity_at ?? b.updated_at).getTime() - new Date(a.last_activity_at ?? a.updated_at).getTime())
+      .slice(0, 6),
+    [records]
   );
 
+  const metricCards = [
+    { label: 'Total Records', value: effectiveTotalRecords, hint: 'All active records', icon: BarChart3, glow: 'radial-gradient(circle at 0% 0%, rgba(0,210,255,0.07), transparent 60%)' },
+    { label: 'Open Records', value: metricValueByLabel.get('Open records') ?? 0, hint: 'Active outreach stages', icon: Activity, glow: 'radial-gradient(circle at 0% 0%, rgba(164,244,253,0.07), transparent 60%)' },
+    { label: 'Follow-ups Today', value: metricValueByLabel.get('Follow-ups due today') ?? 0, hint: 'Needs action today', icon: CalendarDays, glow: 'radial-gradient(circle at 0% 0%, rgba(245,158,11,0.07), transparent 60%)' },
+    { label: 'Updated Today', value: metricValueByLabel.get('Updated today') ?? 0, hint: 'Touched by your team', icon: RefreshCw, glow: 'radial-gradient(circle at 0% 0%, rgba(16,185,129,0.07), transparent 60%)' },
+    { label: 'Closed This Week', value: metricValueByLabel.get('Closed this week') ?? 0, hint: 'Records closed', icon: CheckCircle2, glow: 'radial-gradient(circle at 0% 0%, rgba(16,185,129,0.07), transparent 60%)' },
+    { label: 'Stale Records', value: metricValueByLabel.get('Stale records') ?? 0, hint: 'No activity 7+ days', icon: Timer, glow: 'radial-gradient(circle at 0% 0%, rgba(239,68,68,0.07), transparent 60%)' },
+  ];
+
   if (!session || !workspace) {
-    return <FullPageLoader label="Loading workspace dashboard..." />;
+    return <FullPageLoader label="Loading workspace…" />;
   }
 
   return (
-    <WorkspaceLayout
-      workspace={workspace}
-      onSignOut={handleSignOut}
-      mainBackgroundClassName="bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.26),transparent_45%),radial-gradient(circle_at_82%_12%,rgba(153,246,228,0.24),transparent_46%),#eef2f8]"
-    >
+    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
       <div className="space-y-5">
-        <Card className="relative overflow-hidden border border-[#dbe6f5] bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_50%,#f0f7ff_100%)] p-5 shadow-[0_24px_55px_-36px_rgba(15,23,42,0.55)] sm:p-6">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-20 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.18)_0%,rgba(56,189,248,0)_72%)]"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -left-24 bottom-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(34,197,94,0.12)_0%,rgba(34,197,94,0)_72%)]"
-          />
 
-          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700">Command Center</div>
-              <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-                Dashboard overview
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Track record velocity, follow-up pressure, and stage health from one place.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              
-                {isTruncated ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">
-                    Showing the latest {numberFormatter.format(records.length)} records
-                  </span>
-                ) : null}
-                {configRefreshing ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-700">
-                    Updating workspace config...
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void handleRefresh()}
-                disabled={dataRefreshing || dataLoading}
-                className={buttonStyles('secondary', 'md')}
-              >
-                <RefreshCw className={`h-4 w-4 ${dataRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <Link to="/imports" className={buttonStyles('secondary', 'md')}>
-                <Download className="h-4 w-4" />
-                Import CSV
-              </Link>
-              <Link to="/records" className={buttonStyles('primary', 'md')}>
-                <ArrowUpRight className="h-4 w-4" />
-                Open records queue
-              </Link>
-            </div>
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-[#00d2ff] font-semibold">Email Engine</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">Dashboard</h1>
+            <p className="mt-0.5 text-sm text-white/40">Campaigns, records, and activity — from one place.</p>
           </div>
-        </Card>
-
-        {configError ? (
-          <Card className="border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">{configError}</Card>
-        ) : null}
-
-        {dataError ? (
-          <Card className="border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">{dataError}</Card>
-        ) : null}
-
-        {configLoading || dataLoading || !config ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <SectionSkeleton title="Loading metrics" rows={3} />
-            <SectionSkeleton title="Loading stage health" rows={4} />
-            <SectionSkeleton title="Loading activity" rows={4} />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={dataRefreshing || dataLoading}
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${dataRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <Link to="/imports" className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white">
+              <Download className="h-3.5 w-3.5" />
+              Import CSV
+            </Link>
+            <Link to="/email" className="flex items-center gap-1.5 rounded-xl bg-white text-black font-semibold text-xs px-4 py-2 transition hover:bg-white/90">
+              <Sparkles className="h-3.5 w-3.5" />
+              New Campaign
+            </Link>
           </div>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {metricCards.map((card) => {
-                const Icon = card.icon;
+        </div>
 
-                return (
-                  <Card
-                    key={card.label}
-                    className="relative overflow-hidden border border-[#d7e4f2] bg-[linear-gradient(148deg,#ffffff_0%,#f7fbff_70%,#f2f8ff_100%)] p-5"
-                  >
-                    <div aria-hidden="true" className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent}`} />
-                    <div className="relative flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{card.label}</p>
-                        <p className="mt-3 font-display text-3xl font-semibold text-slate-900">
-                          {numberFormatter.format(card.value)}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">{card.hint}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/70 bg-white/80 p-2.5 shadow-[0_14px_30px_-24px_rgba(15,23,42,0.55)]">
-                        <Icon className="h-4 w-4 text-slate-600" />
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-12">
-              <Card className="border border-[#d7e4f2] bg-white/95 p-5 xl:col-span-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display text-xl font-semibold text-slate-900">Pipeline stage health</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    {stageDistribution.length} stages
-                  </span>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {stageDistribution.length > 0 ? (
-                    stageDistribution.map((stage) => {
-                      const percent = effectiveTotalRecords > 0 ? Math.round((stage.count / effectiveTotalRecords) * 100) : 0;
-
-                      return (
-                        <div key={stage.id} className="rounded-2xl border border-slate-200/85 bg-slate-50/55 p-3">
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
-                              <span className="truncate font-medium text-slate-700">{stage.name}</span>
-                            </div>
-                            <span className="font-semibold text-slate-700">{numberFormatter.format(stage.count)}</span>
-                          </div>
-                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200/80">
-                            <div className="h-full rounded-full" style={{ width: `${Math.min(percent, 100)}%`, backgroundColor: stage.color }} />
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50/75 p-3 text-sm text-slate-500">
-                      No staged records available yet.
-                    </p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="border border-[#d7e4f2] bg-white/95 p-5 xl:col-span-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display text-xl font-semibold text-slate-900">Source performance</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-                    <Activity className="h-3.5 w-3.5" />
-                    Top sources
-                  </span>
-                </div>
-
-                <div className="mt-4 space-y-2.5">
-                  {sourceDistribution.length > 0 ? (
-                    sourceDistribution.map((source) => {
-                      const percent = effectiveTotalRecords > 0 ? Math.round((source.count / effectiveTotalRecords) * 100) : 0;
-
-                      return (
-                        <div key={source.name} className="rounded-2xl border border-slate-200/90 bg-slate-50/60 px-3 py-2.5">
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate font-medium text-slate-700">{source.name}</span>
-                            <span className="whitespace-nowrap font-semibold text-slate-700">
-                              {numberFormatter.format(source.count)} · {percent}%
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50/75 p-3 text-sm text-slate-500">
-                      Import or create records to see source split.
-                    </p>
-                  )}
-                </div>
-              </Card>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-12">
-              <Card className="border border-[#d7e4f2] bg-white/95 p-5 xl:col-span-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display text-xl font-semibold text-slate-900">Priority follow-ups</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Next actions
-                  </span>
-                </div>
-
-                <div className="mt-4 space-y-2.5">
-                  {followUps.length > 0 ? (
-                    followUps.map((item) => {
-                      const stageLabel = config ? getStageName(config, item.record.stage_id) : 'Unstaged';
-
-                      return (
-                        <Link
-                          key={item.record.id}
-                          to={`/records/${item.record.id}`}
-                          className="block rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 transition hover:border-sky-200 hover:bg-sky-50/45"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-semibold text-slate-800">{buildDisplayName(item.record)}</p>
-                            <span className="text-xs text-slate-500">{stageLabel}</span>
-                          </div>
-                          <p className="mt-1 truncate text-xs text-slate-500">{item.summary.taskTitle}</p>
-                          <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                            <span className="text-slate-600">{item.summary.label}</span>
-                            <span className="text-slate-500">{formatFollowUpDateTime(item.record.next_follow_up_at)}</span>
-                          </div>
-                        </Link>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50/75 p-3 text-sm text-slate-500">
-                      No pending follow-up tasks found.
-                    </p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="border border-[#d7e4f2] bg-white/95 p-5 xl:col-span-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display text-xl font-semibold text-slate-900">Recent record activity</h2>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-                    <Clock3 className="h-3.5 w-3.5" />
-                    Live feed
-                  </span>
-                </div>
-
-                <div className="mt-4 space-y-2.5">
-                  {recentActivity.length > 0 ? (
-                    recentActivity.map((record) => (
-                      <Link
-                        key={record.id}
-                        to={`/records/${record.id}`}
-                        className="block rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 transition hover:border-cyan-200 hover:bg-cyan-50/45"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-800">{buildDisplayName(record)}</p>
-                          <span className="text-xs text-slate-500">{formatRelativeDateTime(record.last_activity_at ?? record.updated_at)}</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500">
-                          <span>{formatActivityLabel(record.last_activity_type)}</span>
-                          <span>{record.open_task_count ?? 0} open tasks</span>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50/75 p-3 text-sm text-slate-500">
-                      Activity appears here as records are updated.
-                    </p>
-                  )}
-                </div>
-              </Card>
-            </div>
-
-            <Card className="border border-[#d7e4f2] bg-white/95 p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="font-display text-xl font-semibold text-slate-900">Status distribution</h2>
-                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  Snapshot
-                </span>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {statusDistribution.length > 0 ? (
-                  statusDistribution.map((status) => (
-                    <div
-                      key={status.name}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
-                    >
-                      <span className="font-medium">{status.name}</span>
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-500">
-                        {numberFormatter.format(status.count)}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No status data yet.</p>
-                )}
-              </div>
-            </Card>
-          </>
+        {/* ── Metrics grid ── */}
+        {!configLoading && !dataLoading && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+            {metricCards.map((card) => (
+              <MetricCard key={card.label} {...card} />
+            ))}
+          </div>
         )}
+        {(configLoading || dataLoading) && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 h-28 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {/* ── Campaign Inbox (main section) ── */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-white">Campaign Inbox</h2>
+            <Link to="/email" className="text-xs text-white/40 hover:text-white transition-colors">View all →</Link>
+          </div>
+
+          {/* Inbox container — mirrors landing page InboxMockup */}
+          <div
+            className="relative rounded-2xl overflow-hidden border border-white/10"
+            style={{ background: 'rgba(14,16,20,0.9)', backdropFilter: 'blur(24px)' }}
+          >
+            {/* Title bar */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full" style={{ background: '#ff5f57' }} />
+                <span className="w-3 h-3 rounded-full" style={{ background: '#febc2e' }} />
+                <span className="w-3 h-3 rounded-full" style={{ background: '#28c840' }} />
+              </div>
+              <span className="text-xs text-white/40">Email Engine — Campaigns</span>
+              <div className="w-14" />
+            </div>
+
+            <div className="grid grid-cols-12 h-[480px]">
+              {/* Campaign list */}
+              <div className="col-span-12 md:col-span-5 border-r border-white/[0.07] flex flex-col overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.07]">
+                  <Search className="w-3.5 h-3.5 text-white/30" />
+                  <span className="text-xs text-white/30">Search campaigns</span>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {inboxCampaigns.map((campaign) => (
+                    <button
+                      key={campaign.id}
+                      onClick={() => setSelectedCampaign(campaign)}
+                      className={`w-full text-left px-3 py-3 border-b border-white/[0.05] transition-colors ${
+                        selectedCampaign.id === campaign.id ? 'bg-white/[0.07]' : 'hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-0.5">
+                        <span className={`text-xs font-semibold truncate ${campaign.unread ? 'text-white' : 'text-white/60'}`}>
+                          {campaign.from}
+                        </span>
+                        <span className="text-[10px] text-white/30 flex-shrink-0">{campaign.time}</span>
+                      </div>
+                      <p className={`text-[11px] truncate mb-0.5 ${campaign.unread ? 'text-white/80' : 'text-white/50'}`}>
+                        {campaign.subject}
+                      </p>
+                      <p className="text-[11px] text-white/30 truncate">{campaign.preview}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Campaign detail */}
+              <div className="hidden md:flex md:col-span-7 flex-col overflow-hidden">
+                {/* Toolbar */}
+                <div className="flex items-center gap-1 px-4 py-2 border-b border-white/[0.07]">
+                  {[Reply, Forward, Archive, Trash2].map((Icon, i) => (
+                    <button key={i} className="w-7 h-7 rounded-md hover:bg-white/5 flex items-center justify-center transition-colors">
+                      <Icon className="w-3.5 h-3.5 text-white/40" />
+                    </button>
+                  ))}
+                  <div className="flex-1" />
+                  <button className="w-7 h-7 rounded-md hover:bg-white/5 flex items-center justify-center">
+                    <MoreHorizontal className="w-3.5 h-3.5 text-white/40" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+                  <h2 className="text-sm font-semibold text-white">{selectedCampaign.subject}</h2>
+
+                  {/* Sender row */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#00d2ff] to-[#0B2551] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                      {selectedCampaign.from.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-white">{selectedCampaign.from}</span>
+                        <span className="text-[10px] text-white/40">{selectedCampaign.time}</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 flex-shrink-0" style={{ color: selectedCampaign.tagColor, borderColor: `${selectedCampaign.tagColor}30` }}>
+                      {selectedCampaign.tag}
+                    </span>
+                  </div>
+
+                  {/* AI insight card */}
+                  <div className="rounded-lg bg-white/[0.04] border border-white/10 p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Sparkles className="w-3.5 h-3.5" style={{ color: '#A4F4FD' }} />
+                      <span className="text-[11px] font-semibold text-white/80">AI Insights</span>
+                    </div>
+                    <p className="text-[11px] text-white/60 leading-relaxed">
+                      {selectedCampaign.sent !== '—'
+                        ? `${selectedCampaign.sent} sent · ${selectedCampaign.openRate} open rate · ${selectedCampaign.clickRate} click rate. ${Number(selectedCampaign.openRate) > 60 ? 'Open rate is above baseline — strong subject line.' : 'Consider A/B testing the subject line.'}`
+                        : 'No send data available for this item yet.'}
+                    </p>
+                  </div>
+
+                  {/* Stats */}
+                  {selectedCampaign.sent !== '—' && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Sent', value: selectedCampaign.sent },
+                        { label: 'Opened', value: selectedCampaign.openRate },
+                        { label: 'Clicked', value: selectedCampaign.clickRate },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5 text-center">
+                          <p className="text-sm font-semibold text-white">{value}</p>
+                          <p className="text-[10px] text-white/40 mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Body */}
+                  <div className="text-[12px] text-white/60 leading-relaxed space-y-2">
+                    <p>This campaign is part of your <span className="text-white/80 font-medium">{selectedCampaign.from}</span> flow.</p>
+                    <p>Recipients receive this message based on their enrollment trigger. You can edit the template, adjust the send delay, or pause the sequence from the Email page.</p>
+                    <p className="text-white/40">— Email Engine</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 bg-white/[0.03] w-fit">
+                    <Paperclip className="w-3.5 h-3.5 text-white/40" />
+                    <span className="text-[11px] text-white/60">campaign-report.pdf</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Bottom row: recent activity + stage health ── */}
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Recent record activity */}
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
+              <span className="flex items-center gap-1 text-[10px] text-white/30">
+                <Clock3 className="h-3 w-3" /> Live feed
+              </span>
+            </div>
+            <div className="space-y-2">
+              {recentActivity.length > 0 ? (
+                recentActivity.map((record) => (
+                  <Link
+                    key={record.id}
+                    to={`/records/${record.id}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 hover:bg-white/[0.05] hover:border-white/10 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{buildDisplayName(record)}</p>
+                      <p className="text-[10px] text-white/40 mt-0.5">{record.open_task_count ?? 0} open tasks</p>
+                    </div>
+                    <span className="text-[10px] text-white/30 flex-shrink-0">{formatRelativeDateTime(record.last_activity_at ?? record.updated_at)}</span>
+                  </Link>
+                ))
+              ) : (
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-4 text-center">
+                  <p className="text-xs text-white/30">Activity appears as records are updated.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Campaign performance summary */}
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-white">Campaign Performance</h2>
+              <span className="flex items-center gap-1 text-[10px] text-white/30">
+                <TrendingUp className="h-3 w-3" /> This week
+              </span>
+            </div>
+            <div className="space-y-2">
+              {inboxCampaigns.filter(c => c.sent !== '—').map((campaign) => (
+                <div key={campaign.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-white/80 truncate">{campaign.from}</p>
+                    <div className="mt-1.5 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: campaign.openRate !== '—' ? campaign.openRate : '0%', background: 'linear-gradient(to right, #00d2ff, #A4F4FD)' }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-semibold text-white">{campaign.openRate}</p>
+                    <p className="text-[10px] text-white/30">open rate</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
       </div>
     </WorkspaceLayout>
   );

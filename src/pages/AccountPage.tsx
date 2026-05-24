@@ -803,7 +803,7 @@ export function AccountPage() {
   if (loading && !settings) {
     return (
       <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-        <div className="space-y-5">
+        <div className="workspace-theme space-y-5">
           <SectionSkeleton title="Loading account overview" rows={2} />
           <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
             <SectionSkeleton title="Loading settings menu" rows={4} />
@@ -1309,7 +1309,7 @@ export function AccountPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, ease: 'easeOut' }}
-        className="space-y-5"
+        className="workspace-theme space-y-5"
       >
         <div className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/70 p-1 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(99,102,241,0.16),transparent_30%),radial-gradient(circle_at_90%_18%,rgba(34,211,238,0.14),transparent_28%)]" />

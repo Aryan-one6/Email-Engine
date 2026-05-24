@@ -818,7 +818,7 @@ export function ImportsPage() {
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-6 ">
+      <div className="workspace-theme space-y-6">
         <PageHeader
           eyebrow="Imports"
           title="Import leads"
