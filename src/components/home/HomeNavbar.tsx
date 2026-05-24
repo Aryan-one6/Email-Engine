@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  BookOpenText,
   CircleHelp,
   FileStack,
   Gem,
@@ -27,7 +26,6 @@ const navLinks: NavLinkItem[] = [
   { label: 'Proof', href: '/#proof', icon: ShieldCheck },
   { label: 'How It Works', href: '/#how-it-works', icon: Sparkles },
   { label: 'Pricing', href: '/#pricing', icon: Gem },
-  { label: 'Blogs', to: '/blogs', icon: BookOpenText },
   { label: 'FAQ', href: '/#faq', icon: CircleHelp },
 ];
 

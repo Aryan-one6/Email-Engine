@@ -1,5 +1,4 @@
-import { BookOpenText, CircleHelp, FileStack, Gavel, Gem, ShieldCheck, Sparkles, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { CircleHelp, FileStack, Gavel, Gem, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { LogoMark } from '../ui/LogoMark';
 
 export function HomeFooter() {
@@ -48,10 +47,10 @@ export function HomeFooter() {
                   <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
                   <span>Social Proof</span>
                 </a>
-                <Link to="/blogs" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
-                  <BookOpenText className="h-3.5 w-3.5 text-slate-500" />
-                  <span>Blogs</span>
-                </Link>
+                <a href="/documentation" className="inline-flex items-center gap-2 transition duration-200 hover:translate-x-0.5 hover:text-white">
+                  <FileStack className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Documentation</span>
+                </a>
               </div>
             </div>
 

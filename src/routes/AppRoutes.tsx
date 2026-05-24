@@ -8,7 +8,6 @@ import { PublicOnlyRoute } from './PublicOnlyRoute';
 const HomePage = lazy(async () => import('../pages/HomePage').then((module) => ({ default: module.HomePage })));
 const FeaturesPage = lazy(async () => import('../pages/FeaturesPage').then((m) => ({ default: m.FeaturesPage })));
 const PricingPage = lazy(async () => import('../pages/PricingPage').then((m) => ({ default: m.PricingPage })));
-const BlogPage = lazy(async () => import('../pages/BlogPage').then((m) => ({ default: m.BlogPage })));
 const DocumentationPage = lazy(async () => import('../pages/DocumentationPage').then((m) => ({ default: m.DocumentationPage })));
 const AboutPage = lazy(async () => import('../pages/AboutPage').then((m) => ({ default: m.AboutPage })));
 const PrivacyPage = lazy(async () => import('../pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
@@ -41,10 +40,6 @@ const RecordFormBuilderPage = lazy(async () =>
   import('../pages/RecordFormBuilderPage').then((module) => ({ default: module.RecordFormBuilderPage })),
 );
 const TeamPage = lazy(async () => import('../pages/TeamPage').then((module) => ({ default: module.TeamPage })));
-const BlogsPage = lazy(async () => import('../pages/BlogsPage').then((module) => ({ default: module.BlogsPage })));
-const BlogDetailPage = lazy(async () =>
-  import('../pages/BlogDetailPage').then((module) => ({ default: module.BlogDetailPage })),
-);
 
 function withPageLoader(children: ReactNode, variant: 'app' | 'auth' = 'app') {
   return <Suspense fallback={<FullPageLoader variant={variant} />}>{children}</Suspense>;
@@ -57,15 +52,15 @@ export function AppRoutes() {
       <Route path="/" element={withPageLoader(<HomePage />)} />
       <Route path="/features" element={withPageLoader(<FeaturesPage />)} />
       <Route path="/pricing" element={withPageLoader(<PricingPage />)} />
-      <Route path="/blog" element={withPageLoader(<BlogPage />)} />
       <Route path="/documentation" element={withPageLoader(<DocumentationPage />)} />
       <Route path="/about" element={withPageLoader(<AboutPage />)} />
       <Route path="/privacy" element={withPageLoader(<PrivacyPage />)} />
       <Route path="/terms" element={withPageLoader(<TermsPage />)} />
 
-      {/* Legacy blogs routes */}
-      <Route path="/blogs" element={withPageLoader(<BlogsPage />)} />
-      <Route path="/blogs/:slug" element={withPageLoader(<BlogDetailPage />)} />
+      {/* Legacy blog routes after Sanity removal */}
+      <Route path="/blog" element={<Navigate to="/documentation" replace />} />
+      <Route path="/blogs" element={<Navigate to="/documentation" replace />} />
+      <Route path="/blogs/:slug" element={<Navigate to="/documentation" replace />} />
 
       <Route path="/invite/accept" element={withPageLoader(<InviteAcceptPage />, 'auth')} />
 
