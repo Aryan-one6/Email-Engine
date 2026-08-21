@@ -77,13 +77,13 @@ export function PrivacyPage() {
             </LegalSection>
 
             <LegalSection title="3. Data Storage & Security">
-              <p>Your data is stored on Supabase infrastructure with encryption at rest and in transit. Email credentials are encrypted with AES-256 before storage.</p>
+              <p>Your data is stored on Appwrite infrastructure with encryption at rest and in transit. Email credentials are encrypted with AES-256 before storage.</p>
               <p>We follow industry best practices for securing user data and conduct regular security reviews.</p>
             </LegalSection>
 
             <LegalSection title="4. Third-Party Services">
               <p>Email Engine integrates with Google, Microsoft, and SMTP providers on your behalf. OAuth tokens and credentials are stored securely and used only to send emails you authorize.</p>
-              <p>We use Supabase for authentication and database, and Vercel for hosting. These providers have their own privacy policies.</p>
+              <p>We use Appwrite for authentication and database, and Vercel for hosting. These providers have their own privacy policies.</p>
             </LegalSection>
 
             <LegalSection title="5. Your Rights">

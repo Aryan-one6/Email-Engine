@@ -1,6 +1,6 @@
 const routePreloaders = [
   { match: (path: string) => path === '/', load: () => import('../pages/HomePage') },
-  { match: (path: string) => path === '/documentation', load: () => import('../pages/DocumentationPage') },
+
   { match: (path: string) => path === '/signin', load: () => import('../pages/SignInPage') },
   { match: (path: string) => path === '/signup', load: () => import('../pages/SignUpPage') },
   { match: (path: string) => path === '/invite/accept', load: () => import('../pages/InviteAcceptPage') },

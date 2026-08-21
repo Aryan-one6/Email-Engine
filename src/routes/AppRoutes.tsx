@@ -41,6 +41,7 @@ const RecordFormBuilderPage = lazy(async () =>
 );
 const TeamPage = lazy(async () => import('../pages/TeamPage').then((module) => ({ default: module.TeamPage })));
 
+
 function withPageLoader(children: ReactNode, variant: 'app' | 'auth' = 'app') {
   return <Suspense fallback={<FullPageLoader variant={variant} />}>{children}</Suspense>;
 }
@@ -52,15 +53,11 @@ export function AppRoutes() {
       <Route path="/" element={withPageLoader(<HomePage />)} />
       <Route path="/features" element={withPageLoader(<FeaturesPage />)} />
       <Route path="/pricing" element={withPageLoader(<PricingPage />)} />
+      {/* <Route path="/blog" element={withPageLoader(<BlogPage />)} /> */}
       <Route path="/documentation" element={withPageLoader(<DocumentationPage />)} />
       <Route path="/about" element={withPageLoader(<AboutPage />)} />
       <Route path="/privacy" element={withPageLoader(<PrivacyPage />)} />
       <Route path="/terms" element={withPageLoader(<TermsPage />)} />
-
-      {/* Legacy blog routes after Sanity removal */}
-      <Route path="/blog" element={<Navigate to="/documentation" replace />} />
-      <Route path="/blogs" element={<Navigate to="/documentation" replace />} />
-      <Route path="/blogs/:slug" element={<Navigate to="/documentation" replace />} />
 
       <Route path="/invite/accept" element={withPageLoader(<InviteAcceptPage />, 'auth')} />
 

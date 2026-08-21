@@ -811,27 +811,35 @@ export async function uploadAsset(
     .replace(/-+/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');
 
-  const formData = new FormData();
-  formData.append('workspace_id', workspaceId);
-  formData.append('file_type', fileType);
-  formData.append('is_logo', String(isLogo));
-  formData.append('filename', safeBaseName || file.name || 'asset');
-  formData.append('file', file);
-
-  const { data, error } = await sb.functions.invoke('email-assets-upload', {
-    body: formData,
-  });
-
-  if (error) {
-    const message = error.message || 'Unable to upload this file right now.';
-    throw new Error(`Upload failed: ${message}`);
+  const { data: uploadedFile, error: uploadError } = await sb.storage.from('email-assets').upload(
+    new File([file], safeBaseName || file.name || 'asset', { type: file.type }),
+  );
+  if (uploadError || !uploadedFile) {
+    throw new Error(`Upload failed: ${uploadError?.message || 'Unable to upload this file right now.'}`);
   }
 
-  if (!data || typeof data !== 'object' || !('asset' in data)) {
-    throw new Error('Upload failed: Unexpected response from upload service.');
+  const { data: asset, error } = await sb
+    .from('email_template_assets')
+    .insert({
+      workspace_id: workspaceId,
+      name: safeBaseName || file.name || 'asset',
+      file_type: fileType,
+      mime_type: file.type || 'application/octet-stream',
+      file_size: file.size,
+      storage_path: uploadedFile.path,
+      public_url: uploadedFile.public_url,
+      is_logo: isLogo,
+      is_signature: false,
+      usage_count: 0,
+      metadata: {},
+    })
+    .select()
+    .single();
+  if (error || !asset) {
+    await sb.storage.from('email-assets').remove([uploadedFile.path]);
+    throw new Error(`Upload failed: ${error?.message || 'Unable to save asset metadata.'}`);
   }
-
-  return (data as { asset: EmailTemplateAsset }).asset;
+  return asset as EmailTemplateAsset;
 }
 
 export async function deleteAsset(assetId: string): Promise<void> {

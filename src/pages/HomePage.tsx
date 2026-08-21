@@ -73,7 +73,7 @@ const gradientStyle: React.CSSProperties = {
    SECTION 1 — NAVBAR
 ───────────────────────────────────────────── */
 
-const navLinks = ['Features', 'Pricing', 'Blog', 'Documentation', 'About'];
+const navLinks = ['Features', 'Pricing', 'Documentation', 'About'];
 
 function Navbar() {
   return (
@@ -546,7 +546,7 @@ function FeatureTriage() {
    SECTION 6 — LOGO CLOUD (Integrations)
 ───────────────────────────────────────────── */
 
-const logoNames = ['Google', 'Microsoft', 'Supabase', 'Vercel', 'Stripe', 'HubSpot', 'Slack', 'Zapier'];
+const logoNames = ['Google', 'Microsoft', 'Appwrite', 'Vercel', 'Stripe', 'HubSpot', 'Slack', 'Zapier'];
 
 function LogoCloud() {
   return (

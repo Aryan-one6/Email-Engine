@@ -4,9 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { client } from './lib/appwrite';
 import './index.css';
 
 const AppRoot = import.meta.env.DEV ? Fragment : StrictMode;
+
+void client
+  .ping()
+  .then(() => console.info('[Appwrite] ping successful.'))
+  .catch((error: unknown) => console.error('[Appwrite] ping failed.', error));
 
 ReactDOM.createRoot(document.getElementById('app')!).render(
   <AppRoot>

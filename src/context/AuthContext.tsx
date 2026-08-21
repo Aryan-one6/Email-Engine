@@ -1,7 +1,6 @@
-import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { clearCachedUserWorkspace, fetchUserWorkspace, getCachedUserWorkspace } from '../lib/auth-helpers';
-import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabaseClient';
+import { getSupabaseClient, isAppwriteConfigured, type AppSession as Session, type AppUser as User } from '../lib/supabaseClient';
 import type { WorkspaceSummary } from '../lib/types';
 
 interface AuthContextValue {
@@ -10,7 +9,7 @@ interface AuthContextValue {
   workspace: WorkspaceSummary | null;
   loading: boolean;
   workspaceLoading: boolean;
-  isSupabaseReady: boolean;
+  isAppwriteReady: boolean;
   refreshWorkspace: (sessionOverride?: Session | null) => Promise<WorkspaceSummary | null>;
   signOut: () => Promise<void>;
 }
@@ -29,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refreshWorkspace(sessionOverride?: Session | null) {
     const activeSession = sessionOverride ?? session;
 
-    if (!activeSession || !isSupabaseConfigured) {
+    if (!activeSession || !isAppwriteConfigured) {
       setWorkspace(null);
       setWorkspaceLoading(false);
       setLoading(false);
@@ -75,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    if (!isSupabaseConfigured) {
+    if (!isAppwriteConfigured) {
       return;
     }
 
@@ -90,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!isAppwriteConfigured) {
       setLoading(false);
       return;
     }
@@ -117,29 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((_event, nextSession) => {
-      if (!isMounted) {
-        return;
-      }
-
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-
-      if (nextSession) {
-        void refreshWorkspace(nextSession);
-      } else {
-        clearCachedUserWorkspace();
-        setWorkspace(null);
-        setWorkspaceLoading(false);
-        setLoading(false);
-      }
-    });
-
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -151,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         workspace,
         loading,
         workspaceLoading,
-        isSupabaseReady: isSupabaseConfigured,
+        isAppwriteReady: isAppwriteConfigured,
         refreshWorkspace,
         signOut,
       }}

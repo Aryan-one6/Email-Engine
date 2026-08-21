@@ -4,23 +4,30 @@ function normalizeString(value) {
 
 export default async function handler(_request, response) {
   try {
-    const supabaseUrl = normalizeString(process.env.SUPABASE_URL);
-    const cronSecret = normalizeString(process.env.EMAIL_MANUAL_CRON_SECRET);
+    const endpoint = normalizeString(process.env.APPWRITE_ENDPOINT || 'https://sgp.cloud.appwrite.io/v1').replace(/\/+$/, '');
+    const projectId = normalizeString(process.env.APPWRITE_PROJECT_ID);
+    const apiKey = normalizeString(process.env.APPWRITE_API_KEY);
+    const functionId = normalizeString(process.env.APPWRITE_EMAIL_MANUAL_DISPATCH_FUNCTION_ID || 'email-manual-dispatch');
 
-    if (!supabaseUrl || !cronSecret) {
+    if (!projectId || !apiKey) {
       response.status(500).json({
-        error: 'SUPABASE_URL and EMAIL_MANUAL_CRON_SECRET are required.',
+        error: 'APPWRITE_PROJECT_ID and server-side APPWRITE_API_KEY are required.',
       });
       return;
     }
 
-    const dispatchResponse = await fetch(`${supabaseUrl}/functions/v1/email-manual-dispatch`, {
+    const dispatchResponse = await fetch(`${endpoint}/functions/${encodeURIComponent(functionId)}/executions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-cron-secret': cronSecret,
+        'X-Appwrite-Project': projectId,
+        'X-Appwrite-Key': apiKey,
       },
-      body: JSON.stringify({ source: 'vercel-cron' }),
+      body: JSON.stringify({
+        body: JSON.stringify({ source: 'vercel-cron' }),
+        method: 'POST',
+        async: false,
+      }),
     });
 
     const result = await dispatchResponse.json().catch(() => ({}));

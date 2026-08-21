@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js';
+import type { AppSession as Session } from './supabaseClient';
 import { getSupabaseClient } from './supabaseClient';
 import type {
   CustomFieldDefinitionInput,
@@ -20,6 +20,7 @@ import type {
   RecordSaveInput,
   RecordSummary,
   RecordTask,
+  WorkspaceAssignee,
 } from './crm-types';
 import {
   filterLegacyRecordFields,
@@ -131,7 +132,209 @@ async function resolveInvokeErrorMessage(error: unknown) {
   return fallback || statusPrefix;
 }
 
+type DirectInvokeResult = { handled: true; data: unknown } | null;
+
+function newRecordId() {
+  return crypto.randomUUID();
+}
+
+function asRow(value: unknown) {
+  return (value && typeof value === 'object' ? value : {}) as Record<string, any>;
+}
+
+function rowId(row: Record<string, any>) {
+  return String(row.id ?? row.$id ?? '');
+}
+
+async function listRows(table: string, workspaceId: string) {
+  const result = await getSupabaseClient().from(table).select('*').eq('workspace_id', workspaceId).limit(500);
+  if (result.error) throw new Error(result.error.message);
+  return (Array.isArray(result.data) ? result.data : []).map(asRow);
+}
+
+function defaultConfig(pipelines: Record<string, any>[], sources: Record<string, any>[], customFields: Record<string, any>[], assignees: Record<string, any>[]): CrmWorkspaceConfig {
+  return {
+    pipelines: pipelines.map((pipeline) => ({
+      id: rowId(pipeline),
+      name: String(pipeline.name ?? 'Leads'),
+      is_default: Boolean(pipeline.is_default),
+      stages: [],
+    })),
+    sources: sources.map((source) => ({
+      id: rowId(source),
+      name: String(source.name ?? ''),
+      source_type: source.source_type ?? null,
+      is_active: source.is_active !== false,
+    })),
+    customFields: customFields.map((field) => ({
+      id: rowId(field),
+      field_key: String(field.field_key ?? ''),
+      label: String(field.label ?? field.field_key ?? ''),
+      field_type: field.field_type as CustomFieldDefinition['field_type'],
+      is_required: Boolean(field.is_required),
+      is_active: field.is_active !== false,
+      is_system: Boolean(field.is_system),
+      options: Array.isArray(field.options) ? field.options : null,
+      placeholder: field.placeholder ?? null,
+      help_text: field.help_text ?? null,
+      validation_rules: (field.validation_rules ?? {}) as Record<string, unknown>,
+      default_value: field.default_value ?? null,
+      position: Number(field.position ?? 0),
+    })),
+    assignees: assignees.map((member) => ({
+      userId: String(member.user_id),
+      role: (member.role ?? 'agent') as WorkspaceAssignee['role'],
+      fullName: member.full_name ?? null,
+    })),
+  };
+}
+
+async function directCrmInvoke(name: string, session: Session, body: unknown): Promise<DirectInvokeResult> {
+  const payload = asRow(body);
+  const workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
+  const db = getSupabaseClient();
+
+  if (!['records-config', 'records-custom-fields-list', 'records-custom-fields-update', 'records-list', 'record-get', 'record-create', 'record-update', 'record-move-stage', 'record-add-note', 'record-create-task', 'records-delete'].includes(name)) {
+    return null;
+  }
+  if (!workspaceId) throw new Error('workspace_id is required.');
+
+  if (name === 'records-config') {
+    let pipelines = await listRows('pipelines', workspaceId);
+    let stages = await listRows('pipeline_stages', workspaceId);
+    let sources = await listRows('record_sources', workspaceId);
+    const customFields = await listRows('custom_field_definitions', workspaceId);
+    const members = await listRows('workspace_members', workspaceId);
+
+    if (pipelines.length === 0) {
+      const pipelineId = newRecordId();
+      const pipeline = await db.from('pipelines').insert({ id: pipelineId, workspace_id: workspaceId, entity_type: 'record', name: 'Leads', is_default: true }).select().single();
+      if (pipeline.error) throw new Error(pipeline.error.message);
+      pipelines = pipeline.data ? [asRow(pipeline.data)] : [];
+    }
+    const defaultPipeline = pipelines.find((pipeline) => pipeline.is_default) ?? pipelines[0];
+    if (stages.length === 0 && defaultPipeline) {
+      const stageNames = [
+        ['New', '#6366F1', false],
+        ['Contacted', '#0EA5E9', false],
+        ['Interested', '#22C55E', false],
+        ['Closed', '#64748B', true],
+      ] as const;
+      for (const [index, [stageName, color, isClosed]] of stageNames.entries()) {
+        const stage = await db.from('pipeline_stages').insert({
+          id: newRecordId(), workspace_id: workspaceId, pipeline_id: defaultPipeline.id,
+          name: stageName, position: index, color, is_closed: isClosed, win_probability: isClosed ? 0 : Math.min(90, 20 + index * 20),
+        }).select().single();
+        if (stage.error) throw new Error(stage.error.message);
+        if (stage.data) stages.push(asRow(stage.data));
+      }
+    }
+    if (sources.length === 0) {
+      for (const [sourceName, sourceType] of [['Manual', 'manual'], ['CSV Import', 'import'], ['Website Form', 'web'], ['Referral', 'referral']] as const) {
+        const source = await db.from('record_sources').insert({ id: newRecordId(), workspace_id: workspaceId, name: sourceName, source_type: sourceType, is_active: true }).select().single();
+        if (source.error) throw new Error(source.error.message);
+        if (source.data) sources.push(asRow(source.data));
+      }
+    }
+    const assignees = members.map((member) => ({ ...member, full_name: member.user_id === session.user.id ? session.user.name : null }));
+    const config = defaultConfig(pipelines, sources, customFields, assignees);
+    for (const pipeline of config.pipelines) pipeline.stages = stages.filter((stage) => String(stage.pipeline_id) === pipeline.id).map((stage) => ({
+      id: rowId(stage), pipeline_id: String(stage.pipeline_id), name: String(stage.name), position: Number(stage.position ?? 0), color: stage.color ?? null, is_closed: Boolean(stage.is_closed), win_probability: stage.win_probability == null ? null : Number(stage.win_probability),
+    }));
+    return { handled: true, data: config };
+  }
+
+  if (name === 'records-custom-fields-list') {
+    const fields = await listRows('custom_field_definitions', workspaceId);
+    return { handled: true, data: { fields: defaultConfig([], [], fields, []).customFields } };
+  }
+
+  if (name === 'records-custom-fields-update') {
+    const fields = Array.isArray(payload.custom_fields) ? payload.custom_fields : [];
+    for (const field of fields.map(asRow)) {
+      const fieldData = { ...field, workspace_id: workspaceId, entity_type: 'record', is_active: field.is_active !== false };
+      const result = field.id
+        ? await db.from('custom_field_definitions').update(fieldData).eq('id', field.id)
+        : await db.from('custom_field_definitions').insert({ id: newRecordId(), ...fieldData });
+      if (result.error) throw new Error(result.error.message);
+    }
+    return directCrmInvoke('records-config', session, { workspace_id: workspaceId });
+  }
+
+  if (name === 'records-list') {
+    let records = await listRows('records', workspaceId);
+    const search = String(payload.search ?? '').trim().toLowerCase();
+    if (search) records = records.filter((record) => [record.title, record.full_name, record.company_name, record.email, record.phone].some((value) => String(value ?? '').toLowerCase().includes(search)));
+    for (const [key, value] of [['stage_id', payload.stage_id], ['source_id', payload.source_id], ['assignee_user_id', payload.assignee_user_id], ['status', payload.status]] as const) {
+      if (typeof value === 'string' && value) records = records.filter((record) => String(record[key] ?? '') === value);
+    }
+    if (!payload.include_archived) records = records.filter((record) => !record.archived_at);
+    records.sort((left, right) => String(right.updated_at ?? '').localeCompare(String(left.updated_at ?? '')));
+    const page = Math.max(1, Number(payload.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(payload.pageSize ?? 10)));
+    const total = records.length;
+    const items = records.slice((page - 1) * pageSize, page * pageSize).map((record) => ({ ...record, id: rowId(record), custom: {} })) as RecordSummary[];
+    return { handled: true, data: { items, records: items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)), hasNextPage: page * pageSize < total, hasPrevPage: page > 1 } satisfies RecordListPageResult };
+  }
+
+  if (name === 'record-get') {
+    const recordResult = await db.from('records').select('*').eq('id', payload.record_id).eq('workspace_id', workspaceId).single();
+    if (recordResult.error || !recordResult.data) throw new Error('Record not found.');
+    const [notes, tasks, activities] = await Promise.all([
+      db.from('record_notes').select('*').eq('record_id', payload.record_id).eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
+      db.from('tasks').select('*').eq('record_id', payload.record_id).eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
+      db.from('record_activities').select('*').eq('record_id', payload.record_id).eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
+    ]);
+    if (notes.error || tasks.error || activities.error) throw new Error((notes.error || tasks.error || activities.error)!.message);
+    return { handled: true, data: { record: { ...asRow(recordResult.data), id: rowId(asRow(recordResult.data)), custom: {} } as RecordSummary, custom: {}, notes: notes.data ?? [], tasks: tasks.data ?? [], activities: activities.data ?? [] } satisfies RecordDetailResponse };
+  }
+
+  if (name === 'record-create' || name === 'record-update') {
+    const core = asRow(payload.core);
+    const recordId = name === 'record-update' ? String(payload.record_id) : newRecordId();
+    const now = new Date().toISOString();
+    const data = { ...core, id: recordId, workspace_id: workspaceId, title: core.title ?? core.full_name ?? 'Untitled record', updated_at: now, ...(name === 'record-create' ? { created_at: now, created_by: session.user.id } : { updated_by: session.user.id }) };
+    const result = name === 'record-create'
+      ? await db.from('records').insert(data).select().single()
+      : await db.from('records').update(data).eq('id', recordId).eq('workspace_id', workspaceId);
+    if (result.error) throw new Error(result.error.message);
+    return directCrmInvoke('record-get', session, { workspace_id: workspaceId, record_id: recordId });
+  }
+
+  if (name === 'record-move-stage') {
+    const result = await db.from('records').update({ stage_id: payload.stage_id, updated_at: new Date().toISOString() }).eq('id', payload.record_id).eq('workspace_id', workspaceId);
+    if (result.error) throw new Error(result.error.message);
+    return directCrmInvoke('record-get', session, { workspace_id: workspaceId, record_id: payload.record_id });
+  }
+
+  if (name === 'record-add-note') {
+    const result = await db.from('record_notes').insert({ id: newRecordId(), workspace_id: workspaceId, record_id: payload.record_id, body: payload.body, created_by: session.user.id, updated_by: session.user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return { handled: true, data: { note: result.data } };
+  }
+
+  if (name === 'record-create-task') {
+    const result = await db.from('tasks').insert({ id: newRecordId(), workspace_id: workspaceId, record_id: payload.record_id, title: payload.title, description: payload.description ?? null, priority: payload.priority ?? 'medium', due_at: payload.due_at ?? null, assigned_to: payload.assigned_to ?? null, status: 'open', created_by: session.user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return { handled: true, data: { task: result.data } };
+  }
+
+  if (name === 'records-delete') {
+    const ids = Array.isArray(payload.record_ids) ? payload.record_ids : [];
+    const deletedIds: string[] = [];
+    for (const recordId of ids) {
+      const result = await db.from('records').update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', recordId).eq('workspace_id', workspaceId);
+      if (!result.error) deletedIds.push(String(recordId));
+    }
+    return { handled: true, data: { deleted_count: deletedIds.length, deleted_ids: deletedIds, requested_count: ids.length, skipped_ids: ids.filter((id) => !deletedIds.includes(String(id))) } };
+  }
+
+  return null;
+}
+
 async function invoke<TResponse>(name: string, session: Session, body?: unknown) {
+  const direct = await directCrmInvoke(name, session, body);
+  if (direct?.handled) return direct.data as TResponse;
   const client = getSupabaseClient();
   const { data, error } = await client.functions.invoke<TResponse>(name, {
     body: body as Record<string, unknown> | undefined,

@@ -21,13 +21,17 @@ function getSignInErrorToastMessage(error: unknown, projectRef: string | null): 
   const message = error instanceof Error ? error.message : 'Unable to sign in.';
   const normalized = message.toLowerCase();
 
-  if (normalized.includes('invalid login credentials') || normalized.includes('invalid email or password')) {
+  if (
+    normalized.includes('invalid login credentials') ||
+    normalized.includes('invalid email or password') ||
+    normalized.includes('invalid credentials')
+  ) {
     if (isProductionEnvironment) {
       return 'Invalid email or password.';
     }
 
     const projectLabel = projectRef ? ` (${projectRef})` : '';
-    return `Invalid email or password for this Supabase project${projectLabel}. Verify you are signing in to the correct project.`;
+    return `Invalid email or password for this Appwrite project${projectLabel}. Verify you are signing in to the correct project.`;
   }
 
   if (isProductionEnvironment) {
@@ -40,7 +44,7 @@ function getSignInErrorToastMessage(error: unknown, projectRef: string | null): 
 export function SignInForm() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isSupabaseReady, refreshWorkspace } = useAuth();
+  const { isAppwriteReady, refreshWorkspace } = useAuth();
   const routeState = location.state as SignInRouteState;
   const searchParams = new URLSearchParams(location.search);
   const inviteMode = searchParams.get('invite') === '1';
@@ -75,7 +79,7 @@ export function SignInForm() {
       {
         id: 'signin-password',
         title: 'Enter the current password',
-        body: 'This signs you into Supabase Auth and unlocks the shared email workspace attached to this account.',
+        body: 'This signs you into Appwrite Auth and unlocks the shared email workspace attached to this account.',
         targetId: 'sign-in-password',
       },
       {
@@ -106,8 +110,8 @@ export function SignInForm() {
       return;
     }
 
-    if (!isSupabaseReady) {
-      toast.error('Add your Supabase environment variables to enable sign in.');
+    if (!isAppwriteReady) {
+      toast.error('Add your Appwrite environment variables to enable sign in.');
       return;
     }
 
@@ -166,7 +170,7 @@ export function SignInForm() {
 
   return (
     <form className="space-y-7" onSubmit={handleSubmit}>
-      {!isSupabaseReady ? <ConfigurationNotice /> : null}
+      {!isAppwriteReady ? <ConfigurationNotice /> : null}
       <div className="grid gap-6">
         <Input
           label="Email"

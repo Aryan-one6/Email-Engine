@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js';
+import type { AppSession as Session } from '../../lib/supabaseClient';
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';

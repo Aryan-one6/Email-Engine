@@ -48,7 +48,7 @@ const formVariants: Variants = {
 export function SignUpForm() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isSupabaseReady, refreshWorkspace } = useAuth();
+  const { isAppwriteReady, refreshWorkspace } = useAuth();
   const searchParams = new URLSearchParams(location.search);
   const inviteMode = searchParams.get('invite') === '1';
   const invitedEmail = searchParams.get('email')?.trim() ?? '';
@@ -123,8 +123,8 @@ export function SignUpForm() {
       return;
     }
 
-    if (!isSupabaseReady) {
-      toast.error('Add your Supabase environment variables to enable sign up.');
+    if (!isAppwriteReady) {
+      toast.error('Add your Appwrite environment variables to enable sign up.');
       return;
     }
 
@@ -206,7 +206,12 @@ export function SignUpForm() {
       navigate(getDashboardPath(workspace), { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to complete signup.';
-      toast.error(message);
+      const normalized = message.toLowerCase();
+      if (normalized.includes('same email') || normalized.includes('already exists') || normalized.includes('user_already_exists')) {
+        toast.error('This email is already registered. Please sign in instead or use a different email.');
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -215,7 +220,7 @@ export function SignUpForm() {
   return (
     <form className="relative space-y-5" onSubmit={handleSubmit}>
 
-      {!isSupabaseReady ? <ConfigurationNotice /> : null}
+      {!isAppwriteReady ? <ConfigurationNotice /> : null}
 
       <div className="relative overflow-hidden">
         <AnimatePresence mode="wait" custom={direction}>

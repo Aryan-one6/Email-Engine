@@ -214,13 +214,13 @@ function EmailTemplatesPageInner({
       setCampaigns(cmp);
       setRecordOptions(
         (records ?? [])
-          .map((record) => {
+          .map((record: { id: string; title?: string | null; full_name?: string | null; email?: string | null }) => {
             const email = typeof record.email === 'string' ? record.email.trim() : '';
             if (!email) return null;
             const label = record.full_name || record.title || email;
             return { id: record.id, label, email };
           })
-          .filter((entry): entry is RecordOption => Boolean(entry)),
+          .filter((entry: RecordOption | null): entry is RecordOption => Boolean(entry)),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data.');

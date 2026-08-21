@@ -12,7 +12,7 @@ export function SignInPage() {
       layoutVariant="signin"
       footer={
         <p>
-          Session persistence is enabled through Supabase Auth, so returning users stay signed in across reloads.
+          Session persistence is enabled through Appwrite Auth, so returning users stay signed in across reloads.
         </p>
       }
     >

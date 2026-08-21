@@ -634,13 +634,13 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
 
       setLeadOptions(
         (records ?? [])
-          .map((record) => {
+          .map((record: { id: string; title?: string | null; full_name?: string | null; email?: string | null }) => {
             const email = typeof record.email === 'string' ? record.email.trim().toLowerCase() : '';
             if (!email) return null;
             const label = record.full_name || record.title || email;
             return { id: record.id, label, email };
           })
-          .filter((entry): entry is LeadOption => Boolean(entry)),
+          .filter((entry: LeadOption | null): entry is LeadOption => Boolean(entry)),
       );
     }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed to load.'); }

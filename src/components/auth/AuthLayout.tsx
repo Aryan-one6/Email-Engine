@@ -111,7 +111,7 @@ export function AuthLayout({
 
           {/* Below-card trust note */}
           <p className="mt-5 text-center text-xs text-white/25">
-            Secured by Supabase Auth · No credit card required
+            Secured by Appwrite Auth · No credit card required
           </p>
         </motion.div>
       </div>

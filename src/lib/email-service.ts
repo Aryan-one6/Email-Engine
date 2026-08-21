@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabaseClient';
+import { getAccountSettings } from './account-service';
 import type { WorkspaceRole } from './types';
 
 /* ─── Provider metadata ───────────────────────────────────────────────── */
@@ -166,12 +167,19 @@ async function getFunctionAuthHeaders(): Promise<Record<string, string> | undefi
 
 export async function fetchAccountSettings(): Promise<AccountSettingsGetResponse> {
   const sb = getSupabaseClient();
-  const { data, error } = await sb.functions.invoke<AccountSettingsGetResponse>('account-settings-get', {
-    headers: await getFunctionAuthHeaders(),
-  });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error('No data returned from account-settings-get.');
-  return data;
+  const { data: sessionData } = await sb.auth.getSession();
+  if (!sessionData.session) throw new Error('You must be signed in to load email settings.');
+  const membership = await sb.from('workspace_members').select('workspace_id').eq('user_id', sessionData.session.user.id).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (membership.error || !membership.data) throw new Error(membership.error?.message || 'No workspace is available for this account.');
+  const settings = await getAccountSettings(sessionData.session, String(membership.data.workspace_id));
+  return {
+    workspace_id: settings.workspace.id,
+    workspace: { id: settings.workspace.id, role: settings.workspace.role, can_manage: settings.workspace.can_manage },
+    automation: settings.automation as AccountSettingsGetResponse['automation'],
+    senders: settings.senders as AccountSettingsGetResponse['senders'],
+    sequence_steps: settings.sequence_steps as AccountSettingsGetResponse['sequence_steps'],
+    tokens: settings.tokens,
+  } satisfies AccountSettingsGetResponse;
 }
 
 export interface SmtpSenderInput {
@@ -187,9 +195,24 @@ export interface SmtpSenderInput {
 
 export async function addSmtpSender(input: SmtpSenderInput & { make_default?: boolean }): Promise<void> {
   const sb = getSupabaseClient();
-  const { error } = await sb.functions.invoke('account-settings-sender-add', {
-    body: input,
-    headers: await getFunctionAuthHeaders(),
+  const { data: sessionData } = await sb.auth.getSession();
+  if (!sessionData.session) throw new Error('You must be signed in to add a sender.');
+  const membership = await sb.from('workspace_members').select('workspace_id').eq('user_id', sessionData.session.user.id).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (membership.error || !membership.data) throw new Error(membership.error?.message || 'No workspace is available for this account.');
+  const { error } = await sb.from('workspace_email_senders').insert({
+    id: crypto.randomUUID(),
+    workspace_id: membership.data.workspace_id,
+    provider: input.provider,
+    sender_email: input.sender_email,
+    sender_name: input.sender_name ?? null,
+    smtp_host: input.smtp_host,
+    smtp_port: input.smtp_port,
+    smtp_username: input.smtp_username,
+    smtp_use_tls: input.smtp_use_tls,
+    status: 'pending',
+    health_status: 'unknown',
+    is_active: true,
+    is_default: Boolean(input.make_default),
   });
   if (error) throw new Error(error.message);
 }
@@ -212,7 +235,7 @@ export async function initiateOauth(
     }
 
     throw new Error(
-      `${error.message}. Check Supabase function secrets for OAuth: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, EMAIL_CREDENTIALS_ENCRYPTION_KEY.`,
+      `${error.message}. Check the Appwrite Function secrets for OAuth: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, EMAIL_CREDENTIALS_ENCRYPTION_KEY.`,
     );
   }
   if (!data?.authorize_url) {
